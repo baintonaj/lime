@@ -171,6 +171,17 @@ public:
         call from the audio thread: the vector is already sized by prepare(). */
     void setBandWeight (const double* bandWeight);
 
+    /** The user's attack/release override on the final smoother — the dominant
+        160/300 ms pole after the maximum selector. Engaged, the smoother runs
+        asymmetric: the attack time while the selected level is rising, the
+        release time while it falls. Zero for either value falls back to that
+        direction's published tau, and with both zero the arithmetic reduces to
+        the published symmetric smoother exactly — bit-identical, not merely
+        close. The 15 ms tracking poles ahead of the selector keep their
+        published values regardless. Two std::exp and no allocation, so safe
+        per-change from the audio thread. */
+    void setTimeConstants (double attackMs, double releaseMs);
+
     const double* getTransferScale() const noexcept { return transferScale.data(); }
 
     void reset();
@@ -198,6 +209,11 @@ private:
     std::vector<double> transferScale;   // per-bin F at full boost
 
     double mainCoeff = 0.0, passCoeff = 0.0, finalCoeff = 0.0;
+
+    // The final smoother's asymmetric pair. Both sit at finalCoeff until a user
+    // time engages, so the default path is the published symmetric smoother.
+    double finalRiseCoeff = 0.0, finalFallCoeff = 0.0;
+    double currentFrameSeconds = 0.0;
 
     std::vector<double> passWeight;  // |H_passband(f_k)|
     std::vector<double> mainSmoothed, passSmoothed, control;

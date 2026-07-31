@@ -292,6 +292,22 @@ public:
 
     double getDetectorLowPass() const noexcept { return detectorLowPassHz; }
 
+    /** The user's attack/release override on every stage's final smoothers.
+
+        Engaged, the dominant control poles run asymmetric — the attack time
+        while the detected level rises, the release time while it falls; zero
+        for either value keeps that direction's published tau, and both zero is
+        bit-identical to the published ballistics. Unlike the detector filters
+        this changes the smoothers' stored state trajectory, not a per-frame
+        weight, so the agreement discipline is stricter in one respect: two
+        instances that change it at different moments drift until the poles
+        settle. Pushed to a chain by the engine, never set on one alone.
+        Allocation free and a no-op unless a time actually moved. */
+    void setTimeConstants (double attackMs, double releaseMs);
+
+    double getTimeConstantAttack() const noexcept { return timeAttackMs; }
+    double getTimeConstantRelease() const noexcept { return timeReleaseMs; }
+
     void setGainRealisation (GainRealisation r) noexcept { realisation = r; }
     GainRealisation getGainRealisation() const noexcept { return realisation; }
 
@@ -430,6 +446,9 @@ private:
         once prepare() has sized the vector. */
     void rebuildDetectorWeights();
 
+    /** Pushes the cached user times into every stage's final smoothers. */
+    void applyTimeConstants();
+
     /** Rebuilds the per-bin envelope smoothing coefficients. Cheap, and only reached from
         prepare() and the two setters that can change them, so nothing in the frame loop
         has to work out what they are. */
@@ -455,6 +474,11 @@ private:
     std::vector<double> detectorWeight;
     double detectorHighPassHz = 0.0;
     double detectorLowPassHz = 0.0;
+
+    // The user's attack/release times, cached so prepare can re-apply them to
+    // freshly prepared stages. Zero means that direction keeps its published tau.
+    double timeAttackMs = 0.0;
+    double timeReleaseMs = 0.0;
 
     // Each bin's position along the log section grid, in [0,1], and the weight of each
     // section. Split this way so that rebuilding costs one pow per section rather than one

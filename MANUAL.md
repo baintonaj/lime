@@ -1,6 +1,6 @@
 # Lime
 
-**Spectral companding dynamics processor — user manual** · Aptitude Audio · v1.0.1
+**Spectral companding dynamics processor — user manual** · Aptitude Audio · v1.0.2
 
 # What Lime is
 
@@ -70,15 +70,17 @@ default.
 
 # Installing
 
-Two formats are provided, and they install here:
+Lime is distributed as source; the two-command build in the README produces both plug-in
+formats, and they install here:
 
 ```
 ~/Library/Audio/Plug-Ins/Components/Lime.component     Audio Unit
 ~/Library/Audio/Plug-Ins/VST3/Lime.vst3                VST3
 ```
 
-Both are the same processor with the same interface. Restart your host after installing so it
-rescans. The AU passes Apple's `auval` validation.
+Both are the same processor with the same interface. `make install` at the repository root
+builds, copies both into place and runs the `auval` check in one step. Restart your host
+after installing so it rescans. The AU passes Apple's `auval` validation.
 
 Lime is **stereo or mono in, matching out**, and mono costs exactly half of stereo — nothing
 is allocated or computed for a channel that is not there. Channels are processed independently
@@ -90,18 +92,21 @@ linking would mean one channel's transients modulating the other's noise floor.
 ![The Lime panel](docs/panel.png)
 
 Reading order, top to bottom: what the process is doing to the signal, said as a curve; then
-two rows of knobs with every switch in one column beside them; then identity and level.
+three rows of knobs with every switch in one column beside them; then identity and level.
 
 The top row of knobs belongs to the two passes — **up in** and **up out**, then **down in**
-and **down out**, each pair around its own pass. Beneath them is the plugin's own row of
-four: **s/c hpf** and **s/c lpf**, which band-limit what the level detection hears, then
-the channel trims **input** and **output**. Mix is no longer on the panel — the parameter
-remains, reached from the host, and has its own section below.
+and **down out**, each pair around its own pass. Beneath them sit those passes' time
+constants — **up attack** and **up release** in the columns of the up trims, **down
+attack** and **down release** in the columns of the down trims — so each half's controls
+read as one column group, levels above, ballistics below. The bottom row is the channel
+trims **input** and **output**, centred on the four-column grid. Mix and the side-chain
+filters are not on the panel — the parameters remain, reached from the host, and each has
+its own section below.
 
-Every switch is in one column to the right of both rows: **process** and **mode** on the top
-two lines, **polarity**, **auto** and **bypass** on the third, and the **s/c filters** line
-last — the HPF and LPF switches, level with the knob row they switch. The line under it all
-reads *Aptitude Audio | Lime | v1.0.1*.
+Every switch is in one column to the right of the rows: **process** and **mode** on the top
+two lines, **polarity**, **auto** and **bypass** on the third, and the **time constants**
+line last — the UP and DOWN switches, level with the knob row they govern. The line under
+it all reads *Aptitude Audio | Lime | v1.0.2*.
 
 ## process — off / a / b
 
@@ -273,42 +278,81 @@ They are not the calibration trims and should not be used as them. The trims exi
 the process see the same level on the way back that it produced on the way out; these exist
 to match the plugin to whatever is either side of it in the session.
 
-## s/c hpf and s/c lpf
+## attack and release
 
-A high-pass and a low-pass filter on the **level detection** — the classic side-chain
-pair, each with its own switch on the **s/c filters** line. They filter what every
-compressor stage *hears*, never the audio: no signal, wet or dry, passes through either.
-Each weighting is a third-order Butterworth response, 18 dB per octave, −3 dB exactly at
-its corner, and both corners run from 20 Hz to 20 kHz; engaged together, the two multiply
-and band-limit the detection.
+Four knobs — **up attack**, **up release**, **down attack** and **down release** — global
+attack and release time constants, one pair per half. The names read exactly as the trims
+do: **up** is the forward, encoding pass and **down** the reverse, decoding one, so the up
+pair paces how the encoder's detection follows the programme and the down pair the
+decoder's, and the two pairs are fully independent. Attack runs from 0.1 to 1000 ms and
+release from 10 ms to 5 s, each knob skewed so its default — 5 ms attack, 100 ms
+release — sits straight up. Readouts change units at a second, "5.0 ms" below it and
+"1.20 s" above; typed entry takes a bare number as milliseconds and "1.2 s" or "2s" as
+seconds.
 
-**A filter does nothing until its switch is on**, and both switches rest off. A fresh
-instance detects with the full band — with both switches off the detection is exactly what
-it was in v1.0.0 — and the knobs' resting positions, 80 Hz for the high pass and 6 kHz for
-the low pass, each straight up, are corners held in readiness rather than filters in
-circuit. Throwing the switch is what puts a filter in the detection path, and the throw is
-eased in at the same pace as a corner move rather than stepped.
+What the knobs replace is deliberately narrow. Each spectral stage's detection is a chain
+of smoothers — fast trackers feeding one slower, dominant final pole: 160 ms in the high
+half and 300 ms in the low for the fixed band, 80 and 150 ms for the sliding band — and it
+is **only that final smoother** an engaged pair overrides. The fast trackers ahead of it
+(15 ms in the fixed band, 5 and 7.5 ms in the sliding band) keep their published values,
+because their stagger is part of what makes the process sound the way it does; what you
+are shaping is the smoother that dominates how the detection settles. Engaged, the final
+runs asymmetric — the attack time while the level in a bin is rising, the release time
+while it falls — so the two knobs of a pair govern the two directions of one smoother.
 
-Below an engaged high-pass corner — or above an engaged low-pass one — the programme reads
-quieter to the detectors than it is, and the process answers as it always does when
-something reads quiet: it treats it. Raise the high-pass corner in **up** and more of the
-low end takes the lift; lower the low-pass corner and the top takes it instead; in
-**down** the matching expander pushes the same regions further away. The plot follows
-directly, because the gains it draws are the gains the knobs are changing.
+**A pair does nothing until its switch is on**, and both switches on the **time
+constants** line rest off. Off, the ballistics are the published ones *exactly* — measured
+bit-identical, not merely close — and the knobs' resting positions are times held in
+readiness rather than constants in force, the same arrangement the side-chain filter
+switches use. In the **a** process the up pair replaces the steady-state attack rate and
+the 33 ms recovery while encoding, and the down pair while decoding; the peak/average
+detector constants keep their published values, and so does the 1 ms fast-attack cap — an
+attack set below 1 ms is bounded by that cap, so the bottom decade of the knob is a limit
+being honoured rather than a control failing to respond.
 
-**Any setting leaves the round trip exact.** Both passes weight their detection
-identically, so whatever the encoder does under one pair of corners the decoder undoes
-under the same pair. The one discipline is agreement, as with the trims: an encode and its
-decode must see the same filters — switch states and corners both — so for two-instance
-work set them the same at both ends.
+**The round trip is exact only while the two halves agree** — same switch states, same
+times. Measured, matched pairs engaged at 5 ms and 100 ms null at −41.3 dB in loop mode
+and −277.3 dB through the a-type round trip; halves deliberately mismatched — up at
+5/100, down at 50/1000 — null at −19.1 dB. That is the price of independence: splitting
+the pairs is a legitimate creative choice that forfeits the null, and matching them, or
+leaving both off, preserves it. The discipline is the familiar one with a new clause — an
+encode and its decode must agree across two instances, and now the up and down halves
+must also agree within one. One further caution for the paired duty: because the times
+change the smoothers' stored state, two instances that change a time at different moments
+drift until the smoothers settle, so a *moving* time knob across an encode/decode pair
+does not null until it lands.
+
+What the knobs buy audibly: a 20 ms up release restores the lift after a loud event
+14.7 dB sooner than a 2 s one within the measurement window (7.4 dB in the **a**
+process), and a 1 s up attack sheds the lift 8.4 dB later than a 1 ms one — slower
+withdrawal into loud material, faster recovery out of it, or the reverse, per half.
+
+## the s/c filters, from the host
+
+**The side-chain filters are no longer panel controls.** The four parameters remain —
+Sidechain HPF, 20 Hz to 20 kHz with its default at 80 Hz; Sidechain LPF, the same range
+with its default at 6.00 kHz; and their two switches, both resting off — automatable and
+reachable from your host's parameter list; their knobs went to the time constants. The
+arrangement is the one **mix** and **Set Up** have: the capability intact, deliberately
+off the panel.
+
+The filters themselves are unchanged. They are a high pass and a low pass on the **level
+detection** — they filter what every compressor stage *hears*, never the audio: no
+signal, wet or dry, passes through either. Each is a third-order Butterworth weighting,
+18 dB per octave, −3 dB exactly at its corner, and engaged together the two multiply and
+band-limit the detection. Outside an engaged corner the programme reads quieter to the
+detectors than it is, and the process answers as it always does when something reads
+quiet: it treats it — the plot follows, because the gains it draws are the gains that
+move. **Any setting leaves the round trip exact**, since both passes weight their
+detection identically; the one discipline is agreement, as everywhere — an encode and its
+decode must see the same filters, switch states and corners both.
 
 ## mix
 
 **Mix is not a panel control.** It is a parameter, reachable from your host's parameter
-list or an automation lane; its knob went to the side-chain pair, and it is left off the
-panel deliberately — its working setting for the round trip is its default, and what it
-does beyond that is a mastering and parallel-processing job, not a knob to reach for while
-calibrating. The capability is intact and unchanged: it blends the processed path against
+list or an automation lane, and it is left off the panel deliberately — its working
+setting for the round trip is its default, and what it does beyond that is a mastering
+and parallel-processing job, not a knob to reach for while calibrating. The capability is intact and unchanged: it blends the processed path against
 the dry one, 0 to 200%.
 
 - **0%** — the dry signal, delayed to match. Identical to bypass.
@@ -579,6 +623,7 @@ is useless for the comparison it exists to make.
 | Thresholds, B | about −30, −48, −62 dB relative to reference |
 | Spectral split, B | fixed at 800 Hz, resolved onto 2048 log-spaced sections |
 | Trims | ±10 dB, four |
+| Time constants | attack 0.1 – 1000 ms, release 10 ms – 5 s, one pair per half, switched; published ballistics when off |
 | Masters | ±24 dB in and out |
 | Mix | 0 – 200% |
 | Auto gain | correction ±12 dB, 3 s integration, 400 ms application |
@@ -597,10 +642,20 @@ is useless for the comparison it exists to make.
 | Up Out | −10 … +10 dB | 0.0 |
 | Down In | −10 … +10 dB | 0.0 |
 | Down Out | −10 … +10 dB | 0.0 |
+| Up Attack | 0.1 … 1000 ms | 5.0 ms |
+| Up Release | 10 ms … 5 s | 100 ms |
+| Down Attack | 0.1 … 1000 ms | 5.0 ms |
+| Down Release | 10 ms … 5 s | 100 ms |
+| Up Times On | off / on | off |
+| Down Times On | off / on | off |
+| Sidechain HPF (host only) | 20 Hz … 20 kHz | 80 Hz |
+| Sidechain LPF (host only) | 20 Hz … 20 kHz | 6.00 kHz |
+| Sidechain HPF On (host only) | off / on | off |
+| Sidechain LPF On (host only) | off / on | off |
 | Set Up (host only) | off / on | off |
 | Input | −24 … +24 dB | 0.0 |
 | Output | −24 … +24 dB | 0.0 |
-| Mix | 0 … 200% | 100.00 |
+| Mix (host only) | 0 … 200% | 100.00 |
 | Auto | off / on | off |
 | Polarity | off / on | off |
 
@@ -663,4 +718,4 @@ It is stated here rather than omitted because it is a real shortfall against the
 
 ---
 
-*Aptitude Audio | Lime | v1.0.1*
+*Aptitude Audio | Lime | v1.0.2*

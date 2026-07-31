@@ -41,8 +41,8 @@ the project. See [The central constraint](#the-central-constraint).
 
 ## Status
 
-Version 1.0.1. Working and testable in a host, with every claim below backed by a check in
-the six standalone suites — **684 checks passing**, runnable with one `ctest`.
+Version 1.0.2. Working and testable in a host, with every claim below backed by a check in
+the six standalone suites — **698 checks passing**, runnable with one `ctest`.
 
 One design target is **not** met: the encode → decode round trip should null to better than
 −100 dB and manages about −80 dB on steady tones, −51 dB on dense broadband material near
@@ -76,7 +76,19 @@ the size it is.
 
 ## Building
 
-CMake is the primary build and fetches JUCE 9.0.0 itself:
+Lime is distributed as source only — there are no pre-built downloads; the commands below
+produce everything the plugin ships as. The quickest route is the Makefile:
+
+```sh
+make install
+```
+
+which builds, copies the AU and VST3 into `~/Library/Audio/Plug-Ins`, and validates the AU
+with `auval`. The other targets: `make` just builds, `make universal` builds both
+architectures, `make test` runs the six suites, `make uninstall` removes the installed
+plug-ins, `make clean` deletes the build directory.
+
+The Makefile is a thin wrapper; CMake is the primary build and fetches JUCE 9.0.0 itself:
 
 ```sh
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -89,9 +101,10 @@ configure line; to build against an existing JUCE checkout instead of downloadin
 
 The AU, VST3 and Standalone targets land under `build/Lime_artefacts/Release/`. Copy the two
 plug-ins into `~/Library/Audio/Plug-Ins/Components` and `~/Library/Audio/Plug-Ins/VST3` to
-install them, then validate the AU with `auval -v aufx Lim1 APTI`. Installing is left to you
-deliberately: `auval` reports on whatever is installed, and a build that installs silently is
-a build that can silently test the wrong binary.
+install them, then validate the AU with `auval -v aufx Lim1 APTI`. Installing is never a
+side effect of building, whichever route you take — `make install` is an explicit target —
+because `auval` reports on whatever is installed, and a build that installs silently is a
+build that can silently test the wrong binary.
 
 The Projucer project `Lime/Lime.jucer` is kept as a secondary route for anyone working in
 that ecosystem — resave it with a JUCE 9 Projucer and build the generated Xcode project.
@@ -117,7 +130,7 @@ done
 
 | Suite | Checks | Covers |
 |---|---|---|
-| `DspTests` | 343 | transforms, WOLA, overlap-save, geometry, main path, fixed band, modulation control, sliding layer, gain slew, engine nulls, published curves, section resolution, section transitions, control smoothing, fractional delay, crossfade, delay-line repositioning, auto gain, the probes following the active direction, the display probe's torn-read guarantee, allocation-free processing, measured on-path latency |
+| `DspTests` | 389 | transforms, WOLA, overlap-save, geometry, main path, fixed band, modulation control, sliding layer, gain slew, engine nulls, published curves, section resolution, section transitions, control smoothing, fractional delay, crossfade, delay-line repositioning, auto gain, the probes following the active direction, the display probe's torn-read guarantee, allocation-free processing, measured on-path latency, the side-chain detection filters, the per-half time constants |
 | `CalibrationTests` | 81 | pink noise, calibration noise and tone, auto compare (mono and stereo), detector |
 | `TapeTests` | 56 | hiss, saturation asymmetry, HF loss, modulation noise |
 | `BarkTests` | 52 | Bark mapping, masking spread, exact all-pairs threshold |
@@ -138,6 +151,7 @@ Lime/Source/*.h,*.cpp     the plug-in wrapper and the panel
 Lime/Source/tests/        six standalone test binaries
 Lime/Lime.jucer           Projucer project (secondary; CMake is primary)
 CMakeLists.txt            plug-in, DSP library and test suites
+Makefile                  convenience wrapper: make / make test / make install
 MANUAL.md                 the user manual
 DESIGN.md                 the design record — every decision, every measurement
 CHANGELOG.md              release history

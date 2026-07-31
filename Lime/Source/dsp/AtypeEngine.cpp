@@ -355,6 +355,40 @@ void AtypeEngine::setSidechainLowPass (double cornerHz) noexcept
     rebuildDetectorWeights();
 }
 
+void AtypeEngine::setTimeConstants (double upAttack, double upRelease,
+                                    double downAttack, double downRelease) noexcept
+{
+    if (upAttack == upAttackMs && upRelease == upReleaseMs
+        && downAttack == downAttackMs && downRelease == downReleaseMs)
+        return;
+
+    upAttackMs = upAttack;
+    upReleaseMs = upRelease;
+    downAttackMs = downAttack;
+    downReleaseMs = downRelease;
+
+    rebuildEffectiveTimes();
+}
+
+void AtypeEngine::rebuildEffectiveTimes() noexcept
+{
+    const double attackMs[2] = { upAttackMs, downAttackMs };
+    const double releaseMs[2] = { upReleaseMs, downReleaseMs };
+
+    for (int d = 0; d < 2; ++d)
+    {
+        const auto i = (size_t) d;
+
+        effectiveAttackRate[i] = attackMs[d] > 0.0 && currentSampleRate > 0.0
+                                   ? 1.0 / (attackMs[d] * 0.001 * currentSampleRate)
+                                   : attackRate;
+
+        effectiveRecoveryCoef[i] = releaseMs[d] > 0.0 && currentSampleRate > 0.0
+                                     ? onePoleCoefficient (releaseMs[d] * 0.001, currentSampleRate)
+                                     : recoveryCoef;
+    }
+}
+
 void AtypeEngine::rebuildDetectorWeights() noexcept
 {
     // Each band is represented by the geometric centre of its nominal range,
@@ -417,6 +451,10 @@ void AtypeEngine::prepare (double sampleRate, int maxBlockSize, int numChannels)
     attackRate = 1.0 / (atypeBands::attackSeconds * currentSampleRate);
     attackCoefMax = onePoleCoefficient (atypeBands::fastestAttackSeconds, currentSampleRate);
     recoveryCoef = onePoleCoefficient (atypeBands::recoverySeconds, currentSampleRate);
+
+    // User times set before prepare — or surviving a sample-rate change — are
+    // honoured rather than lost, the setSidechainHighPass contract.
+    rebuildEffectiveTimes();
 
     channels.clear();
     channels.reserve ((size_t) std::max (0, numChannels));
@@ -517,6 +555,11 @@ void AtypeEngine::updateControl (BandState& s, double bandSample) const noexcept
     // becomes negligible in proportion as the signal grows.
     const double targetGain = (level > threshold) ? threshold / level : 1.0;
 
+    // The direction selects the user's ballistics: the up pair while encoding,
+    // the down pair while decoding, the published constants wherever a time is
+    // disengaged.
+    const auto dir = (size_t) (mode == AtypeMode::decode ? 1 : 0);
+
     if (targetGain < s.gain)
     {
         // Attack. Slow for small amplitude variations, shortened in proportion to
@@ -524,11 +567,11 @@ void AtypeEngine::updateControl (BandState& s, double bandSample) const noexcept
         // enough to reach the clipper are handled by the clipper meanwhile.
         const double ratio = s.gain / targetGain;
 
-        s.gain += (targetGain - s.gain) * std::min (ratio * attackRate, attackCoefMax);
+        s.gain += (targetGain - s.gain) * std::min (ratio * effectiveAttackRate[dir], attackCoefMax);
     }
     else
     {
-        s.gain += (targetGain - s.gain) * recoveryCoef;
+        s.gain += (targetGain - s.gain) * effectiveRecoveryCoef[dir];
     }
 }
 

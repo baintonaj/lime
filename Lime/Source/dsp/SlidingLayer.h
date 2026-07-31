@@ -135,6 +135,18 @@ public:
         is as well-behaved as what it opposes. */
     void setModulationControl (double level) noexcept { modulationControl = std::max (0.0, level); }
 
+    /** The user's attack/release override on the final smoothers — the 80/150 ms
+        poles the control and the MC opposition share. Both take the pair
+        together: the opposition has to stay as smooth as what it opposes (see
+        processFrame), so letting the per-bin control run user times while the
+        MC reference kept the published pole would transiently mis-form the
+        end-stop ratio. Engaged, each smoother runs the attack time while its
+        input is rising and the release time while it falls; zero for either
+        value falls back to that direction's published tau, and both zero is
+        bit-identical to the published symmetric smoother. The 5/7.5 ms first
+        poles keep published values. Allocation free. */
+    void setTimeConstants (double attackMs, double releaseMs);
+
     /** Advances one frame.
 
         @param magnitudes    this stage's input magnitude per bin
@@ -163,6 +175,11 @@ private:
     double thresholdLinear = 1.0;
     double firstCoeff = 0.0, finalCoeff = 0.0;
     double modulationControl = 0.0;
+
+    // The final smoothers' asymmetric pair. Both sit at finalCoeff until a user
+    // time engages, so the default path is the published symmetric smoother.
+    double finalRiseCoeff = 0.0, finalFallCoeff = 0.0;
+    double currentFrameSeconds = 0.0;
 
     // The MC level smoothed by the same two poles as the per-bin control; see
     // processFrame.

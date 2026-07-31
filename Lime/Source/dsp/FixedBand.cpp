@@ -54,6 +54,10 @@ void FixedBand::prepare (const FixedBandParams& p, int bins,
     passCoeff = framePoleCoefficient (params.passBandTauMs, frameSeconds);
     finalCoeff = framePoleCoefficient (params.finalTauMs, frameSeconds);
 
+    currentFrameSeconds = frameSeconds;
+    finalRiseCoeff = finalCoeff;
+    finalFallCoeff = finalCoeff;
+
     passWeight.assign ((size_t) numBins, 0.0);
 
     for (int k = 0; k < numBins; ++k)
@@ -66,6 +70,14 @@ void FixedBand::prepare (const FixedBandParams& p, int bins,
     mainSmoothed.assign ((size_t) numBins, 0.0);
     passSmoothed.assign ((size_t) numBins, 0.0);
     control.assign ((size_t) numBins, 0.0);
+}
+
+void FixedBand::setTimeConstants (double attackMs, double releaseMs)
+{
+    finalRiseCoeff = attackMs > 0.0 ? framePoleCoefficient (attackMs, currentFrameSeconds)
+                                    : finalCoeff;
+    finalFallCoeff = releaseMs > 0.0 ? framePoleCoefficient (releaseMs, currentFrameSeconds)
+                                     : finalCoeff;
 }
 
 void FixedBand::reset()
@@ -115,7 +127,12 @@ void FixedBand::processFrame (const double* magnitudes, double* transferOut)
 
         const double selected = std::max (mainSmoothed[i], passSmoothed[i]);
 
-        control[i] = finalCoeff * control[i] + (1.0 - finalCoeff) * selected;
+        // Rising selected level is the attack direction. With no user times the
+        // two coefficients are both finalCoeff and this is the published
+        // symmetric smoother, bit for bit.
+        const double finalA = selected > control[i] ? finalRiseCoeff : finalFallCoeff;
+
+        control[i] = finalA * control[i] + (1.0 - finalA) * selected;
     }
 }
 

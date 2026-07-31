@@ -182,6 +182,21 @@ public:
     void setSidechainLowPass (double cornerHz) noexcept;
     double getSidechainLowPass() const noexcept { return detectorLowPassHz; }
 
+    /** The user's attack/release times, one pair per direction.
+
+        The up pair replaces the steady-state attack rate and the recovery time
+        while the engine encodes; the down pair does the same while it decodes.
+        The peak and average detector constants and the 1 ms fast-attack cap
+        stay published — a user attack below 1 ms only steepens the
+        transition-proportional scaling, it never beats the cap. Zero for any
+        value keeps that direction's published constant, and all four zero is
+        bit-identical to the published ballistics. The round trip is exact only
+        while an encoder and its decoder run the same pair; setting them apart
+        is a creative choice that forfeits the exact null. Allocation free and
+        a no-op unless a time actually moved. */
+    void setTimeConstants (double upAttackMs, double upReleaseMs,
+                           double downAttackMs, double downReleaseMs) noexcept;
+
     /** Processes in place. `channelData` must hold `numChannels` pointers to at
         least `numSamples` doubles. */
     void process (double* const* channelData, int numChannels, int numSamples);
@@ -232,6 +247,9 @@ private:
 
     void rebuildDetectorWeights() noexcept;
 
+    /** Derives the per-direction effective ballistics from the user times. */
+    void rebuildEffectiveTimes() noexcept;
+
     std::vector<std::unique_ptr<Channel>> channels;
 
     // Bands 1, 3 and 4; band 2 is derived.
@@ -251,6 +269,17 @@ private:
 
     double peakAttackCoef = 1.0, peakReleaseCoef = 1.0, averageCoef = 1.0;
     double attackRate = 1.0, attackCoefMax = 1.0, recoveryCoef = 1.0;
+
+    // The user's per-direction attack/release times; zero keeps the published
+    // constant for that direction.
+    double upAttackMs = 0.0, upReleaseMs = 0.0;
+    double downAttackMs = 0.0, downReleaseMs = 0.0;
+
+    // Effective ballistics per direction, [0] encode and [1] decode, derived
+    // from the user times here and in prepare. Equal to the published
+    // attackRate / recoveryCoef while the times are zero.
+    std::array<double, 2> effectiveAttackRate { 1.0, 1.0 };
+    std::array<double, 2> effectiveRecoveryCoef { 1.0, 1.0 };
 
     AtypeMode mode = AtypeMode::encode;
     bool prepared = false;

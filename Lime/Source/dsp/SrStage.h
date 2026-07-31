@@ -101,6 +101,15 @@ public:
         sliding.setModulationControl (level);
     }
 
+    /** The user's attack/release override, to both circuits' final smoothers at
+        once — the stage is one detection and its two halves must keep moving
+        together. See FixedBand::setTimeConstants for the contract. */
+    void setTimeConstants (double attackMs, double releaseMs)
+    {
+        fixed.setTimeConstants (attackMs, releaseMs);
+        sliding.setTimeConstants (attackMs, releaseMs);
+    }
+
     int getNumBins() const noexcept { return numBins_; }
     int getNumDominants() const noexcept { return sliding.getNumDominants(); }
 

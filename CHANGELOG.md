@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.0.2
+
+- Four new knobs — **up attack**, **up release**, **down attack** and **down release** —
+  give the two halves of the pair independent global attack and release time constants:
+  one pair for the up (encode) pass, one for the down (decode) pass. Attack runs 0.1 to
+  1000 ms and release 10 ms to 5 s, each skewed so its default — 5 ms and 100 ms — points
+  straight up, the side-chain corners' precedent; readouts switch to seconds above one
+  ("5.0 ms", "1.20 s"), and typed entry takes a bare number as milliseconds and "1.2 s" or
+  "2s" as seconds. What an engaged pair overrides is deliberately only the **final**
+  smoother of each spectral stage's detection — the fixed band's 160 ms (HF) / 300 ms (LF)
+  pole after the maximum selector, the sliding band's 80 and 150 ms finals — run
+  asymmetric: the attack time while the level rises, the release time while it falls. The
+  fast published trackers ahead of them (the 15 ms fixed-band mains and pass-band, the 5
+  and 7.5 ms sliding firsts) keep their published values, so the staggered character
+  survives; in the a-type process the up pair replaces the steady-state attack rate and
+  the 33 ms recovery while encoding and the down pair while decoding, with the detector
+  constants and the 1 ms fast-attack cap untouched.
+- Each half has its own switch — `upTimeOn` and `downTimeOn`, both resting **off** — on
+  a switch line now captioned **time constants**. Off, the ballistics are the published
+  ones exactly — measured bit-identical in both engines, a difference of exactly 0 — and
+  the knobs' positions are times held in readiness rather than constants in force, the
+  arrangement the side-chain filter switches introduced. Each pair provably never reaches
+  the other direction's detection, also at exactly 0.
+- **The round trip is exact only while the up and down halves agree** — same switch
+  states, same times. Measured, matched pairs engaged at 5 ms/100 ms null at −41.3 dB in
+  loop mode and −277.3 dB through the a-type round trip; halves deliberately mismatched
+  (up at 5/100, down at 50/1000) null at −19.1 dB — the price of independence, asserted as
+  a property rather than treated as a bug. Splitting the pairs is a legitimate creative
+  choice that forfeits the null; matching them, or leaving both off, preserves it. The
+  agreement discipline the section count and the s/c corners set gains an intra-instance
+  clause — and because the times change the smoothers' stored state, a time knob *moving*
+  across a two-instance pair does not null until it lands.
+- The **s/c hpf** and **s/c lpf** knobs and their switches left the panel to make the
+  room. All four parameters remain — Sidechain HPF at 80 Hz, Sidechain LPF at 6.00 kHz,
+  both switches resting off — host-visible and automatable, the arrangement mix and Set Up
+  have; the filters themselves are unchanged.
+- The knob grid is now three rows: the pass trims, a new row of their time constants —
+  each half's pair in the columns of its own trims — and a masters row of **input** and
+  **output**, centred on the four-column grid. The switch column's fourth line carries the
+  UP and DOWN switches, level with the knob row they govern, and the panel is one knob-row
+  taller.
+- `DspTests` grew `testGlobalTimeConstants` — the nulls above, the bit-identity of the
+  disengaged state, and the audible asymmetries: a 20 ms up release restores boost 14.7 dB
+  sooner than a 2 s one within the measurement window (7.4 dB in the a-type), and a 1 s up
+  attack sheds boost 8.4 dB later than a 1 ms one. `DspTests` is now 389 checks and the
+  suites total 698.
+
 ## 1.0.1
 
 - Two new knobs — **s/c hpf** and **s/c lpf** — the classic side-chain filters, realised

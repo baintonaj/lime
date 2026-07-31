@@ -46,6 +46,10 @@ void SlidingLayer::prepare (const SlidingLayerParams& p, int bins,
     firstCoeff = framePoleCoefficient (params.firstTauMs, frameSeconds);
     finalCoeff = framePoleCoefficient (params.finalTauMs, frameSeconds);
 
+    currentFrameSeconds = frameSeconds;
+    finalRiseCoeff = finalCoeff;
+    finalFallCoeff = finalCoeff;
+
     spread.prepare (numBins, sampleRate, fftSize);
 
     controlWeight.assign ((size_t) numBins, 0.0);
@@ -67,6 +71,14 @@ void SlidingLayer::prepare (const SlidingLayerParams& p, int bins,
     control.assign ((size_t) numBins, 0.0);
 
     reset();
+}
+
+void SlidingLayer::setTimeConstants (double attackMs, double releaseMs)
+{
+    finalRiseCoeff = attackMs > 0.0 ? framePoleCoefficient (attackMs, currentFrameSeconds)
+                                    : finalCoeff;
+    finalFallCoeff = releaseMs > 0.0 ? framePoleCoefficient (releaseMs, currentFrameSeconds)
+                                     : finalCoeff;
 }
 
 void SlidingLayer::reset()
@@ -138,7 +150,14 @@ void SlidingLayer::processFrame (const double* magnitudes, double* fractionOut,
     // old formulation did implicitly — a subtraction ahead of a linear smoother
     // is a smoothed subtraction.
     mcFirstSmoothed = firstCoeff * mcFirstSmoothed + (1.0 - firstCoeff) * modulationControl;
-    mcSmoothed = finalCoeff * mcSmoothed + (1.0 - finalCoeff) * mcFirstSmoothed;
+
+    // The final poles — here and per bin below — run the user's asymmetric pair
+    // when times are engaged: attack while the input rises, release while it
+    // falls. With no user times both coefficients are finalCoeff and this is
+    // the published symmetric smoother, bit for bit.
+    const double mcFinalA = mcFirstSmoothed > mcSmoothed ? finalRiseCoeff : finalFallCoeff;
+
+    mcSmoothed = mcFinalA * mcSmoothed + (1.0 - mcFinalA) * mcFirstSmoothed;
 
     for (int k = 0; k < numBins; ++k)
     {
@@ -163,7 +182,10 @@ void SlidingLayer::processFrame (const double* magnitudes, double* fractionOut,
         const double controlInput = spreadMagnitude * controlWeight[i];
 
         firstSmoothed[i] = firstCoeff * firstSmoothed[i] + (1.0 - firstCoeff) * controlInput;
-        control[i] = finalCoeff * control[i] + (1.0 - finalCoeff) * firstSmoothed[i];
+
+        const double finalA = firstSmoothed[i] > control[i] ? finalRiseCoeff : finalFallCoeff;
+
+        control[i] = finalA * control[i] + (1.0 - finalA) * firstSmoothed[i];
 
         // Opposed by MC1 (high frequencies) or MC4 (low). Section 3.3: "the ratio
         // between the rectified control signal and MC1 monitors the signal

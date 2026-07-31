@@ -181,6 +181,18 @@ public:
         SrSideChain::setDetectorLowPass. */
     void setSidechainLowPass (double cornerHz);
 
+    /** The user's attack/release times, one pair per direction.
+
+        The up pair goes to both encode side chains and the down pair to both
+        decode side chains — the two halves of one detection must always agree.
+        The pairs themselves may differ, and that is the deliberate trade: the
+        round trip is exact only while up and down run the same ballistics, so
+        setting them apart is a creative choice that forfeits the exact null
+        until they agree again. Zero for any value keeps that direction's
+        published tau. See SrSideChain::setTimeConstants. */
+    void setTimeConstants (double upAttackMs, double upReleaseMs,
+                           double downAttackMs, double downReleaseMs);
+
     /** The three calibration trims that sit *inside* the loop, as linear gains.
 
         In loop mode the channel is inside the instance, so send out, return in and return
@@ -263,6 +275,10 @@ private:
     double envelopeBark = 1.0;
     double sidechainHighPassHz = 0.0;
     double sidechainLowPassHz = 0.0;
+
+    // The user's per-direction attack/release times, cached across prepare.
+    double upAttackMs = 0.0, upReleaseMs = 0.0;
+    double downAttackMs = 0.0, downReleaseMs = 0.0;
     GainRealisation realisation = GainRealisation::stft;
     bool prepared = false;
 

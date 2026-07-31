@@ -214,6 +214,12 @@ private:
     std::atomic<float>* scLpfParam = nullptr;
     std::atomic<float>* scHpfOnParam = nullptr;
     std::atomic<float>* scLpfOnParam = nullptr;
+    std::atomic<float>* upAttackParam = nullptr;
+    std::atomic<float>* upReleaseParam = nullptr;
+    std::atomic<float>* downAttackParam = nullptr;
+    std::atomic<float>* downReleaseParam = nullptr;
+    std::atomic<float>* upTimeOnParam = nullptr;
+    std::atomic<float>* downTimeOnParam = nullptr;
 
     lime::SrEngine engine;
     lime::AtypeEngine atype;

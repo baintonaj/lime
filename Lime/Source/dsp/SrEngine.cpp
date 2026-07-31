@@ -186,6 +186,7 @@ void SrEngine::prepare (double sampleRate, int maxBlockSize, int numChannels)
     setProbesActive (probesActive.load (std::memory_order_relaxed));
     setSidechainHighPass (sidechainHighPassHz);
     setSidechainLowPass (sidechainLowPassHz);
+    setTimeConstants (upAttackMs, upReleaseMs, downAttackMs, downReleaseMs);
 
     // Unity, and snapped rather than faded: prepare is not a control movement.
     sendOutTrim.prepare (sampleRate, defaultSettlingSeconds, 1.0);
@@ -296,6 +297,28 @@ void SrEngine::setSidechainLowPass (double cornerHz)
         c->lfEncode.setDetectorLowPass (cornerHz);
         c->hfDecode.setDetectorLowPass (cornerHz);
         c->lfDecode.setDetectorLowPass (cornerHz);
+    }
+}
+
+void SrEngine::setTimeConstants (double upAttack, double upRelease,
+                                 double downAttack, double downRelease)
+{
+    upAttackMs = upAttack;
+    upReleaseMs = upRelease;
+    downAttackMs = downAttack;
+    downReleaseMs = downRelease;
+
+    // Each direction's pair goes to both of its side chains — the hf and lf
+    // halves are one detection and must keep moving together. Up and down may
+    // differ; the price, stated plainly, is the exact null: encode and decode
+    // that run different ballistics compute different gains, and the round trip
+    // is complementary again only once the pairs agree.
+    for (auto& c : channels)
+    {
+        c->hfEncode.setTimeConstants (upAttack, upRelease);
+        c->lfEncode.setTimeConstants (upAttack, upRelease);
+        c->hfDecode.setTimeConstants (downAttack, downRelease);
+        c->lfDecode.setTimeConstants (downAttack, downRelease);
     }
 }
 

@@ -31,6 +31,12 @@ namespace
     constexpr auto scLpfId = "scLpf";
     constexpr auto scHpfOnId = "scHpfOn";
     constexpr auto scLpfOnId = "scLpfOn";
+    constexpr auto upAttackId = "upAttack";
+    constexpr auto upReleaseId = "upRelease";
+    constexpr auto downAttackId = "downAttack";
+    constexpr auto downReleaseId = "downRelease";
+    constexpr auto upTimeOnId = "upTimeOn";
+    constexpr auto downTimeOnId = "downTimeOn";
 
     /** The band split's resolution, compiled in rather than exposed.
 
@@ -90,6 +96,25 @@ namespace
     {
         juce::NormalisableRange<float> range { 20.0f, 20000.0f, 1.0f };
         range.setSkewForCentre (6000.0f);
+        return range;
+    }
+
+    /** An attack sweeps a decade either side of the sliding band's published 5 ms
+        first pole, skew centred on the 5 ms default so noon is stock — the
+        side-chain corner precedent. */
+    juce::NormalisableRange<float> attackRange()
+    {
+        juce::NormalisableRange<float> range { 0.1f, 1000.0f, 0.01f };
+        range.setSkewForCentre (5.0f);
+        return range;
+    }
+
+    /** A release spans 10 ms to 5 s around its 100 ms default — the neighbourhood
+        of the published 80/150 ms finals — for the same reason: noon is stock. */
+    juce::NormalisableRange<float> releaseRange()
+    {
+        juce::NormalisableRange<float> range { 10.0f, 5000.0f, 0.1f };
+        range.setSkewForCentre (100.0f);
         return range;
     }
 
@@ -157,6 +182,31 @@ namespace
                 return text.containsIgnoreCase ("k") ? number * 1000.0f : number;
             });
     }
+
+    /** Times read in the unit a musician says them: "5.0 ms" below a second,
+        "1.20 s" from there up. Typed values: a bare number is milliseconds, and
+        text carrying an 's' with no 'm' — "1.2 s", "2s" — is seconds; the range
+        clamps afterwards. */
+    juce::AudioParameterFloatAttributes msAttributes()
+    {
+        return juce::AudioParameterFloatAttributes()
+            .withLabel ("ms")
+            .withStringFromValueFunction ([] (float value, int)
+            {
+                if (value >= 1000.0f)
+                    return juce::String (value / 1000.0f, 2) + " s";
+
+                return juce::String (value, 1) + " ms";
+            })
+            .withValueFromStringFunction ([] (const juce::String& text)
+            {
+                const auto number = text.retainCharacters ("-+.0123456789").getFloatValue();
+                const bool seconds = text.containsIgnoreCase ("s")
+                                  && ! text.containsIgnoreCase ("m");
+
+                return seconds ? number * 1000.0f : number;
+            });
+    }
 }
 
 //==============================================================================
@@ -220,7 +270,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout LimeAudioProcessor::createPa
     // gain curve on the plot moves accordingly. Because encode and decode weight
     // their detection identically, any setting leaves the round trip exact —
     // agree on it across two instances, like the trims. 18 dB an octave,
-    // Butterworth, so the corner reads true.
+    // Butterworth, so the corner reads true. Off the panel since the time
+    // constants took the knobs, but still full parameters, the arrangement mix
+    // and Set Up have — the filters themselves are unchanged.
     layout.add (std::make_unique<AudioParameterFloat> (
         ParameterID { scHpfId, 1 }, "Sidechain HPF", scHpfRange(), 80.0f, hzAttributes()));
 
@@ -236,6 +288,31 @@ juce::AudioProcessorValueTreeState::ParameterLayout LimeAudioProcessor::createPa
         ParameterID { scHpfOnId, 1 }, "Sidechain HPF On", false));
     layout.add (std::make_unique<AudioParameterBool> (
         ParameterID { scLpfOnId, 1 }, "Sidechain LPF On", false));
+
+    // The per-half time constants. Each pair overrides the dominant final
+    // smoothers of its own direction's detection — attack while the detected
+    // level rises, release while it falls — leaving the fast published trackers
+    // in place. The halves are deliberately independent, and the trade is
+    // stated plainly: the round trip is exact only while up and down run the
+    // same ballistics, so matching the pairs (or leaving both switches off) is
+    // what preserves the null, and splitting them is a creative choice that
+    // forfeits it.
+    layout.add (std::make_unique<AudioParameterFloat> (
+        ParameterID { upAttackId, 1 }, "Up Attack", attackRange(), 5.0f, msAttributes()));
+    layout.add (std::make_unique<AudioParameterFloat> (
+        ParameterID { upReleaseId, 1 }, "Up Release", releaseRange(), 100.0f, msAttributes()));
+    layout.add (std::make_unique<AudioParameterFloat> (
+        ParameterID { downAttackId, 1 }, "Down Attack", attackRange(), 5.0f, msAttributes()));
+    layout.add (std::make_unique<AudioParameterFloat> (
+        ParameterID { downReleaseId, 1 }, "Down Release", releaseRange(), 100.0f, msAttributes()));
+
+    // One switch per half, both resting off: a fresh instance runs the published
+    // ballistics, and the knobs hold times in readiness — the side-chain
+    // filters' arrangement, kept.
+    layout.add (std::make_unique<AudioParameterBool> (
+        ParameterID { upTimeOnId, 1 }, "Up Times On", false));
+    layout.add (std::make_unique<AudioParameterBool> (
+        ParameterID { downTimeOnId, 1 }, "Down Times On", false));
 
     // Off the panel since the side-chain low pass took its knob, but still a full
     // parameter — reachable from the host's list and automatable, the same
@@ -274,6 +351,12 @@ LimeAudioProcessor::LimeAudioProcessor()
     scLpfParam = parameters.getRawParameterValue (scLpfId);
     scHpfOnParam = parameters.getRawParameterValue (scHpfOnId);
     scLpfOnParam = parameters.getRawParameterValue (scLpfOnId);
+    upAttackParam = parameters.getRawParameterValue (upAttackId);
+    upReleaseParam = parameters.getRawParameterValue (upReleaseId);
+    downAttackParam = parameters.getRawParameterValue (downAttackId);
+    downReleaseParam = parameters.getRawParameterValue (downReleaseId);
+    upTimeOnParam = parameters.getRawParameterValue (upTimeOnId);
+    downTimeOnParam = parameters.getRawParameterValue (downTimeOnId);
 }
 
 LimeAudioProcessor::~LimeAudioProcessor() = default;
@@ -635,6 +718,17 @@ void LimeAudioProcessor::processChunk (juce::AudioBuffer<double>& buffer)
     engine.setSidechainLowPass (lpfCorner);
     atype.setSidechainHighPass (hpfCorner);
     atype.setSidechainLowPass (lpfCorner);
+
+    // The per-half time constants, by the same arrangement: a switched-off half
+    // reads as no times at all, which the engines take as the published
+    // ballistics, and each setter is a no-op unless a value moved.
+    const double upAttack = *upTimeOnParam > 0.5f ? (double) upAttackParam->load() : 0.0;
+    const double upRelease = *upTimeOnParam > 0.5f ? (double) upReleaseParam->load() : 0.0;
+    const double downAttack = *downTimeOnParam > 0.5f ? (double) downAttackParam->load() : 0.0;
+    const double downRelease = *downTimeOnParam > 0.5f ? (double) downReleaseParam->load() : 0.0;
+
+    engine.setTimeConstants (upAttack, upRelease, downAttack, downRelease);
+    atype.setTimeConstants (upAttack, upRelease, downAttack, downRelease);
 
     bypassAmount.setTarget (isBypassed() ? 0.0 : 1.0);
     transition.setTarget (configurationChanging ? 0.0 : 1.0);

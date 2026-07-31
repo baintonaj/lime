@@ -610,12 +610,12 @@ measured and recorded rather than assumed benign.
 
 ## Final state
 
-**684 checks passing** across six standalone test binaries, plus AU and VST3 building clean
+**698 checks passing** across six standalone test binaries, plus AU and VST3 building clean
 in Debug and Release and `auval` succeeding:
 
 | Suite | Checks | Covers |
 |---|---|---|
-| `DspTests` | 375 | transforms, WOLA, overlap-save, geometry, main path, fixed band, modulation control, sliding layer, gain slew, engine nulls, published curves, auto gain, the probes following the active direction, the wet low pass, the side-chain detection filters |
+| `DspTests` | 389 | transforms, WOLA, overlap-save, geometry, main path, fixed band, modulation control, sliding layer, gain slew, engine nulls, published curves, auto gain, the probes following the active direction, the wet low pass, the side-chain detection filters, the per-half time constants |
 | `CalibrationTests` | 81 | pink noise, calibration noise and tone, Auto Compare, detector |
 | `PhaseTests` | 75 | phase rotator (library component) magnitude, rotation difference, inversion, transparency at zero |
 | `TapeTests` | 56 | hiss, saturation asymmetry, HF loss, modulation noise |
@@ -1966,3 +1966,87 @@ host-visible and automatable, default 100%, the blend arithmetic and the bit-exa
 zero unchanged. The precedent is Set Up's: a control whose real-two-instance setting is
 its default, kept off the panel deliberately with the capability intact, reachable from
 the parameter list by the sessions that want it.
+
+---
+
+## v1.0.2 — the per-half time constants
+
+The feature was designed twice before it was built once. The first design was a single
+linked pair — one attack and one release governing both halves at once — and it became
+per-half independence at the user's direction: four knobs, `upAttack`, `upRelease`,
+`downAttack` and `downRelease` — "Up Attack" and so on to the host — so the encode and
+decode halves each carry their own global ballistics. Attack runs 0.1 to 1000 ms and
+release 10 ms to 5 s, each skewed to put its default — 5 ms and 100 ms — at noon, the
+side-chain corners' precedent; readouts change units at a second ("5.0 ms", "1.20 s"),
+and typed entry takes a bare number as milliseconds and "1.2 s" or "2s" as seconds.
+
+What the times override is deliberately only the **final** smoother of each spectral
+stage's detection — the fixed band's 160 ms (HF) / 300 ms (LF) pole after the maximum
+selector, and the sliding band's 80/150 ms finals. The staggered fast trackers ahead of
+them — the 15 ms fixed-band mains and pass-band, the 5/7.5 ms sliding firsts — keep their
+published values, because the stagger *is* the architecture: the character of the process
+comes from fast trackers at deliberately different speeds feeding a slower pole, and a
+knob that flattened that stagger would be a different process wearing the same panel.
+What the user shapes is the smoother that dominates how the detection settles, and
+nothing else. Engaged, a final runs asymmetric — the attack time while its input is
+rising, the release time while it falls — so one smoother carries both knobs of a pair.
+
+The sliding band's modulation-control opposition is smoothed by the same finals, and it
+deliberately **follows the user pair**. The code's own invariant is that the opposition
+must be as smooth as what it opposes; letting the per-bin control run user times while
+the MC reference kept the published pole would let the two sides of the end-stop ratio
+settle at different speeds, transiently mis-forming the ratio on every level change. So
+the reference moves with the control, and the invariant holds at any setting.
+
+Engagement is a per-value **zero sentinel**: zero for either value keeps that direction's
+published tau, and with a switch off both values are zero, where the sentinel reduces to
+the identical arithmetic — measured bit-identical in both engines, asserted at tolerance
+zero, so `Up Times On` and `Down Times On` resting off is the published unit exactly. The
+knobs hold times in readiness, the arrangement the side-chain filter switches
+established. Each pair is also provably confined to its own direction — encoding under
+down-pair changes and decoding under up-pair changes both measure a difference of
+exactly 0.
+
+The a-type engine maps the pairs onto its own ballistics: the up pair replaces the
+steady-state attack rate — published 0.1 s, proportional to the transition — and the
+33 ms recovery while encoding, the down pair while decoding. The peak/average detector
+constants and the 1 ms fast-attack cap stay published, so a user attack below 1 ms is
+bounded by the cap — the knob's bottom decade is a limit honoured, not a control ignored.
+
+The headline property is a trade, stated plainly: **the round trip is exact only while
+the up and down halves agree** — same switch states, same times. Measured, matched pairs
+engaged at 5 ms/100 ms null at −41.3 dB in loop mode (limit −26) and −277.3 dB through
+the a-type round trip (limit −100); halves deliberately mismatched — up at 5/100, down at
+50/1000 — null at −19.1 dB, asserted as a property so a later change that "improves" it
+gets noticed. Splitting the pairs is a legitimate creative choice that forfeits the null;
+matching them, or leaving both off, preserves it. The agreement discipline the section
+count and the s/c corners established gains an intra-instance clause — and the times
+carry a caveat the s/c weights did not: because they change the smoothers' stored state
+trajectories rather than a memoryless weighting, two instances that change a time at
+different moments drift until the poles settle, so a *moving* time knob across an
+encode/decode pair does not null until it lands.
+
+The panel grew a third knob row between the pass trims and the masters, each half's pair
+sitting in the columns of its own trims — levels above, ballistics below, per half — and
+the masters row is now **input** and **output**, centred on the four-column grid; the
+switch column's fourth line is recaptioned **time constants**, an UP and a DOWN switch
+level with the knob row they govern, and the panel is one knob-row taller.
+
+`testGlobalTimeConstants` in `DspTests` measures the lot: the matched and mismatched
+nulls above, the exact-0 disengaged and cross-direction differences, and the audible
+asymmetries — a 20 ms up release restores boost 14.7 dB sooner than a 2 s one within the
+measurement window (7.4 dB in the a-type), and a 1 s up attack sheds boost 8.4 dB later
+than a 1 ms one.
+
+### State
+
+**698 checks passing** across the six suites, 0 failures:
+
+| Suite | Checks |
+|---|---|
+| `DspTests` | 389 |
+| `CalibrationTests` | 81 |
+| `PhaseTests` | 75 |
+| `TapeTests` | 56 |
+| `BarkTests` | 52 |
+| `AtypeTests` | 45 |

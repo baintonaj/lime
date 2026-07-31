@@ -107,8 +107,11 @@ void SrSideChain::prepare (bool highFrequency, int fftOrder, int hop, double sam
     rebuildBandWeights();
 
     // A detector corner set before prepare — or surviving a sample-rate change —
-    // is honoured rather than lost, the same contract setSections keeps.
+    // is honoured rather than lost, the same contract setSections keeps. The
+    // user times ride along: the stages come out of prepare on their published
+    // coefficients, computed for the new frame duration.
     rebuildDetectorWeights();
+    applyTimeConstants();
 
     // Per-bin coefficient for a smoother whose width is constant in Bark rather than
     // in bins, so the envelope is smoothed by a critical band everywhere.
@@ -269,6 +272,22 @@ void SrSideChain::setDetectorLowPass (double cornerHz)
 
     detectorLowPassHz = cornerHz;
     rebuildDetectorWeights();
+}
+
+void SrSideChain::setTimeConstants (double attackMs, double releaseMs)
+{
+    if (attackMs == timeAttackMs && releaseMs == timeReleaseMs)
+        return;
+
+    timeAttackMs = attackMs;
+    timeReleaseMs = releaseMs;
+    applyTimeConstants();
+}
+
+void SrSideChain::applyTimeConstants()
+{
+    for (auto& stage : stages)
+        stage.setTimeConstants (timeAttackMs, timeReleaseMs);
 }
 
 void SrSideChain::rebuildDetectorWeights()

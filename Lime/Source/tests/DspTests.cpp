@@ -3804,6 +3804,401 @@ void testSidechainLowPass()
     }
 }
 
+//==============================================================================
+/** The per-half attack/release times. Disengaged they are bit-identical to the
+    published ballistics; engaged and matched across the halves the round trip
+    keeps its null; mismatched halves forfeit it — measured here so the
+    agreement discipline is a number rather than a warning. Each half's pair
+    only reaches its own direction, and the knobs audibly do what they say. */
+void testGlobalTimeConstants()
+{
+    std::printf ("\nPer-half attack/release time constants\n");
+
+    // The frame-pole convention the feature rests on: the coefficient is the
+    // fraction kept per frame, exp(-frame/tau).
+    expectNear ("frame pole at tau = one frame is 1/e",
+                framePoleCoefficient (10.0, 0.010), std::exp (-1.0), 1.0e-12, "");
+
+    // Component level: the final smoother's asymmetric pair on a FixedBand.
+    {
+        const double frameSeconds = 256.0 / 48000.0;
+        constexpr int bins = 8;
+
+        const auto runFrames = [] (FixedBand& band, double magnitude, int frames)
+        {
+            std::vector<double> magnitudes ((size_t) bins, magnitude);
+            std::vector<double> transfer ((size_t) bins, 0.0);
+
+            for (int n = 0; n < frames; ++n)
+                band.processFrame (magnitudes.data(), transfer.data());
+        };
+
+        FixedBand published, engaged, cleared;
+        published.prepare (FixedBandParams {}, bins, 48000.0, 1024, frameSeconds);
+        engaged.prepare (FixedBandParams {}, bins, 48000.0, 1024, frameSeconds);
+        cleared.prepare (FixedBandParams {}, bins, 48000.0, 1024, frameSeconds);
+
+        // Engaging and disengaging returns the exact published trajectory.
+        cleared.setTimeConstants (5.0, 100.0);
+        cleared.setTimeConstants (0.0, 0.0);
+
+        runFrames (published, 0.1, 10);
+        runFrames (cleared, 0.1, 10);
+
+        expectNear ("disengaged fixed band is bit-identical",
+                    cleared.getControl()[0] - published.getControl()[0], 0.0, 0.0, "");
+
+        // A 5 ms attack outruns the published 160 ms final within ten frames.
+        engaged.setTimeConstants (5.0, 0.0);
+        runFrames (engaged, 0.1, 10);
+
+        ++checks;
+        const bool faster = engaged.getControl()[0] > published.getControl()[0];
+
+        if (! faster)
+            ++failures;
+
+        std::printf ("  [%s] %-58s %8.3f    (published %.3f)\n",
+                     faster ? "pass" : "FAIL",
+                     "a 5 ms attack outruns the published 160 ms rise",
+                     engaged.getControl()[0], published.getControl()[0]);
+
+        // And a 20 ms release falls faster once the level goes away.
+        FixedBand slowFall, fastFall;
+        slowFall.prepare (FixedBandParams {}, bins, 48000.0, 1024, frameSeconds);
+        fastFall.prepare (FixedBandParams {}, bins, 48000.0, 1024, frameSeconds);
+        fastFall.setTimeConstants (0.0, 20.0);
+
+        runFrames (slowFall, 0.1, 400);
+        runFrames (fastFall, 0.1, 400);
+        runFrames (slowFall, 0.0, 10);
+        runFrames (fastFall, 0.0, 10);
+
+        ++checks;
+        const bool falls = fastFall.getControl()[0] < slowFall.getControl()[0];
+
+        if (! falls)
+            ++failures;
+
+        std::printf ("  [%s] %-58s %8.4f    (published %.4f)\n",
+                     falls ? "pass" : "FAIL",
+                     "a 20 ms release undercuts the published 160 ms fall",
+                     fastFall.getControl()[0], slowFall.getControl()[0]);
+    }
+
+    TapeChannelSettings transparent;
+    transparent.hissEnabled = false;
+    transparent.saturationEnabled = false;
+    transparent.hfLossEnabled = false;
+    transparent.modulationNoiseEnabled = false;
+
+    // Disengaged is bit-identical: the whole suite runs on the sentinel, and
+    // this pins it directly — an engine told "no times" against one never told
+    // anything.
+    {
+        SrEngine plain, told;
+
+        for (auto* e : { &plain, &told })
+        {
+            e->prepare (48000.0, 1024, 1);
+            e->setProcess (SrProcess::spectralRecording);
+            e->setMode (SrMode::loop);
+            e->getTapeChannel().setSettings (transparent);
+        }
+
+        told.setTimeConstants (0.0, 0.0, 0.0, 0.0);
+
+        const int total = 4 * plain.getLatencySamples();
+
+        auto input = makeNoise (total, 72727u);
+
+        for (auto& v : input)
+            v *= 0.05;
+
+        std::vector<double> a = input, b = input;
+        runEngine (plain, a);
+        runEngine (told, b);
+
+        double diff = 0.0;
+
+        for (size_t n = 0; n < a.size(); ++n)
+            diff = std::max (diff, std::abs (a[n] - b[n]));
+
+        expectNear ("disengaged spectral engine is bit-identical", diff, 0.0, 0.0, "");
+    }
+
+    // Matched halves keep the loop null; mismatched halves measurably forfeit
+    // it. The second number is the price of independence, asserted so it reads
+    // as a property rather than a defect report.
+    double matchedDb = 0.0;
+
+    {
+        const auto loopNullDb = [&transparent] (double upA, double upR,
+                                                double downA, double downR)
+        {
+            SrEngine engine;
+            engine.prepare (48000.0, 1024, 1);
+            engine.setProcess (SrProcess::spectralRecording);
+            engine.setMode (SrMode::loop);
+            engine.setTimeConstants (upA, upR, downA, downR);
+            engine.getTapeChannel().setSettings (transparent);
+
+            const int latency = engine.getLatencySamples();
+            const int total = 6 * latency;
+
+            auto input = makeNoise (total, 21212u);
+
+            for (auto& v : input)
+                v *= 0.05;
+
+            std::vector<double> output = input;
+            runEngine (engine, output);
+
+            return relativeDb (delayedError (output, input, latency, latency),
+                               peakMagnitude (input));
+        };
+
+        matchedDb = loopNullDb (5.0, 100.0, 5.0, 100.0);
+        const double mismatchedDb = loopNullDb (5.0, 100.0, 50.0, 1000.0);
+
+        expectBelow ("loop-mode null with matched times, 5 ms / 100 ms",
+                     matchedDb, -26.0);
+
+        ++checks;
+        const bool forfeited = mismatchedDb > matchedDb + 3.0;
+
+        if (! forfeited)
+            ++failures;
+
+        std::printf ("  [%s] %-58s %8.1f dB  (matched %6.1f dB)\n",
+                     forfeited ? "pass" : "FAIL",
+                     "mismatched halves forfeit the null, as stated",
+                     mismatchedDb, matchedDb);
+    }
+
+    // Each pair reaches only its own direction: an encode-only instance is
+    // bit-identical whatever the down pair says, and a decode-only instance
+    // whatever the up pair says.
+    {
+        const auto directionDiff = [&transparent] (SrMode mode, double upA, double upR,
+                                                   double downA, double downR)
+        {
+            SrEngine plain, told;
+
+            for (auto* e : { &plain, &told })
+            {
+                e->prepare (48000.0, 1024, 1);
+                e->setProcess (SrProcess::spectralRecording);
+                e->setMode (mode);
+                e->getTapeChannel().setSettings (transparent);
+            }
+
+            told.setTimeConstants (upA, upR, downA, downR);
+
+            const int total = 4 * plain.getLatencySamples();
+
+            auto input = makeNoise (total, 34343u);
+
+            for (auto& v : input)
+                v *= 0.05;
+
+            std::vector<double> a = input, b = input;
+            runEngine (plain, a);
+            runEngine (told, b);
+
+            double diff = 0.0;
+
+            for (size_t n = 0; n < a.size(); ++n)
+                diff = std::max (diff, std::abs (a[n] - b[n]));
+
+            return diff;
+        };
+
+        expectNear ("the down pair never reaches an encode",
+                    directionDiff (SrMode::encode, 0.0, 0.0, 500.0, 5000.0), 0.0, 0.0, "");
+        expectNear ("the up pair never reaches a decode",
+                    directionDiff (SrMode::decode, 500.0, 5000.0, 0.0, 0.0), 0.0, 0.0, "");
+    }
+
+    // The knobs do what they say on the way out of a transient. A tone drops
+    // 46 dB mid-buffer; a fast up release restores the boost inside the
+    // measurement window where a slow one has barely begun.
+    {
+        const auto windowedDb = [] (double attackMs, double releaseMs,
+                                    bool loudFirst, int windowStart, int windowLength)
+        {
+            SrEngine engine;
+            engine.prepare (48000.0, 1024, 1);
+            engine.setProcess (SrProcess::spectralRecording);
+            engine.setMode (SrMode::encode);
+            engine.setTimeConstants (attackMs, releaseMs, 0.0, 0.0);
+
+            const int latency = engine.getLatencySamples();
+            const int total = 8 * latency;
+            const int half = total / 2;
+
+            std::vector<double> buffer ((size_t) total);
+
+            for (int n = 0; n < total; ++n)
+            {
+                const double amplitude = (n < half) == loudFirst ? 0.1 : 5.0e-4;
+                buffer[(size_t) n] = amplitude * std::sin (twoPi * 1000.0 * (double) n / 48000.0);
+            }
+
+            runEngine (engine, buffer);
+
+            const int start = half + latency + windowStart;
+            double sum = 0.0;
+
+            for (int n = start; n < start + windowLength; ++n)
+                sum += buffer[(size_t) n] * buffer[(size_t) n];
+
+            return 10.0 * std::log10 (sum / (double) windowLength);
+        };
+
+        const double fastRelease = windowedDb (0.0, 20.0, true, 4800, 12000);
+        const double slowRelease = windowedDb (0.0, 2000.0, true, 4800, 12000);
+
+        ++checks;
+        const bool releases = fastRelease - slowRelease > 3.0;
+
+        if (! releases)
+            ++failures;
+
+        std::printf ("  [%s] %-58s %8.1f dB  (wants above %.1f dB)\n",
+                     releases ? "pass" : "FAIL",
+                     "a 20 ms up release restores boost sooner than 2 s",
+                     fastRelease - slowRelease, 3.0);
+
+        // And on the way in: a slow attack keeps shedding boost long after a
+        // fast one has finished.
+        const double fastAttack = windowedDb (1.0, 0.0, false, 480, 4800);
+        const double slowAttack = windowedDb (1000.0, 0.0, false, 480, 4800);
+
+        ++checks;
+        const bool attacks = slowAttack - fastAttack > 2.0;
+
+        if (! attacks)
+            ++failures;
+
+        std::printf ("  [%s] %-58s %8.1f dB  (wants above %.1f dB)\n",
+                     attacks ? "pass" : "FAIL",
+                     "a 1 s up attack sheds boost later than 1 ms",
+                     slowAttack - fastAttack, 2.0);
+    }
+
+    // A-type: same contract. Disengaged bit-identical, matched pairs leave the
+    // decoder's solver exact, and the release knob is audible on the way out.
+    {
+        const auto runAtype = [] (AtypeEngine& e, std::vector<double>& buffer)
+        {
+            constexpr int block = 512;
+
+            for (int at = 0; at < (int) buffer.size(); at += block)
+            {
+                double* ptr = buffer.data() + at;
+                const int len = std::min (block, (int) buffer.size() - at);
+                e.process (&ptr, 1, len);
+            }
+        };
+
+        {
+            AtypeEngine plain, told;
+            plain.prepare (48000.0, 512, 1);
+            told.prepare (48000.0, 512, 1);
+            plain.setMode (AtypeMode::encode);
+            told.setMode (AtypeMode::encode);
+            told.setTimeConstants (0.0, 0.0, 0.0, 0.0);
+
+            auto input = makeNoise (48000, 45454u);
+
+            for (auto& v : input)
+                v *= 0.05;
+
+            std::vector<double> a = input, b = input;
+            runAtype (plain, a);
+            runAtype (told, b);
+
+            double diff = 0.0;
+
+            for (size_t n = 0; n < a.size(); ++n)
+                diff = std::max (diff, std::abs (a[n] - b[n]));
+
+            expectNear ("disengaged a-type is bit-identical", diff, 0.0, 0.0, "");
+        }
+
+        {
+            AtypeEngine encoder, decoder;
+            encoder.prepare (48000.0, 512, 1);
+            decoder.prepare (48000.0, 512, 1);
+            encoder.setMode (AtypeMode::encode);
+            decoder.setMode (AtypeMode::decode);
+            encoder.setTimeConstants (5.0, 100.0, 5.0, 100.0);
+            decoder.setTimeConstants (5.0, 100.0, 5.0, 100.0);
+
+            auto input = makeNoise (48000, 56565u);
+
+            for (auto& v : input)
+                v *= 0.05;
+
+            std::vector<double> processed = input;
+            runAtype (encoder, processed);
+            runAtype (decoder, processed);
+
+            double err = 0.0;
+
+            for (size_t n = 0; n < input.size(); ++n)
+                err = std::max (err, std::abs (processed[n] - input[n]));
+
+            expectBelow ("a-type round trip with matched times, 5 ms / 100 ms",
+                         relativeDb (err, peakMagnitude (input)), -100.0);
+        }
+
+        {
+            const auto atypeReleaseDb = [&runAtype] (double releaseMs)
+            {
+                AtypeEngine e;
+                e.prepare (48000.0, 512, 1);
+                e.setMode (AtypeMode::encode);
+                e.setTimeConstants (0.0, releaseMs, 0.0, 0.0);
+
+                std::vector<double> buffer (48000);
+                const int half = (int) buffer.size() / 2;
+
+                for (int n = 0; n < (int) buffer.size(); ++n)
+                {
+                    const double amplitude = n < half ? 0.05 : 5.0e-4;
+                    buffer[(size_t) n] = amplitude * std::sin (twoPi * 12000.0 * (double) n / 48000.0);
+                }
+
+                runAtype (e, buffer);
+
+                double sum = 0.0;
+                const int start = half + 2400;
+                const int length = 9600;
+
+                for (int n = start; n < start + length; ++n)
+                    sum += buffer[(size_t) n] * buffer[(size_t) n];
+
+                return 10.0 * std::log10 (sum / (double) length);
+            };
+
+            const double extraDb = atypeReleaseDb (20.0) - atypeReleaseDb (2000.0);
+
+            ++checks;
+            const bool releases = extraDb > 1.0;
+
+            if (! releases)
+                ++failures;
+
+            std::printf ("  [%s] %-58s %8.1f dB  (wants above %.1f dB)\n",
+                         releases ? "pass" : "FAIL",
+                         "a-type: a 20 ms release restores boost sooner than 2 s",
+                         extraDb, 1.0);
+        }
+    }
+}
+
 } // namespace
 
 //==============================================================================
@@ -3847,6 +4242,7 @@ int main()
     testWetLowPass();
     testSidechainHighPass();
     testSidechainLowPass();
+    testGlobalTimeConstants();
 
     std::printf ("\n%d checks, %d failure%s\n", checks, failures, failures == 1 ? "" : "s");
 
