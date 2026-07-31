@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<JUCERPROJECT id="Up1RVG" name="Lime" projectType="audioplug" useAppConfig="0"
+              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" version="1.0.0"
+              companyName="Aptitude Audio" companyCopyright="Andy Bainton (Aptitude Audio)"
+              companyEmail="" companyWebsite="https://github.com/baintonaj/lime"
+              pluginFormats="buildAU,buildStandalone,buildVST3"
+              pluginManufacturerCode="APTI" pluginCode="Lim1" pluginDesc="Spectral companding dynamics"
+              pluginVST3Category="Dynamics" cppLanguageStandard="20">
+  <MAINGROUP id="QYdLLE" name="Lime">
+    <GROUP id="{C9657650-D03A-2463-07F9-567ACDCA03CD}" name="Source">
+      <FILE id="eRWRIt" name="PluginProcessor.cpp" compile="1" resource="0"
+            file="Source/PluginProcessor.cpp"/>
+      <FILE id="SS3gOk" name="PluginProcessor.h" compile="0" resource="0"
+            file="Source/PluginProcessor.h"/>
+      <FILE id="wUe1Qf" name="PluginEditor.cpp" compile="1" resource="0"
+            file="Source/PluginEditor.cpp"/>
+      <FILE id="PX1TNm" name="PluginEditor.h" compile="0" resource="0" file="Source/PluginEditor.h"/>
+      <FILE id="srcStyH" name="LimeStyle.h" compile="0" resource="0" file="Source/LimeStyle.h"/>
+      <FILE id="srcGfxH" name="LimeGraphics.h" compile="0" resource="0" file="Source/LimeGraphics.h"/>
+      <FILE id="srcSurH" name="LimeSurfaces.h" compile="0" resource="0" file="Source/LimeSurfaces.h"/>
+      <FILE id="srcMtrH" name="MeterBar.h" compile="0" resource="0" file="Source/MeterBar.h"/>
+      <FILE id="srcLafH" name="LimeLookAndFeel.h" compile="0" resource="0"
+            file="Source/LimeLookAndFeel.h"/>
+      <FILE id="srcSpdH" name="SpectrumDisplay.h" compile="0" resource="0"
+            file="Source/SpectrumDisplay.h"/>
+      <GROUP id="{1A2B3C4D-0001-4000-8000-000000000001}" name="dsp">
+        <FILE id="dspFftH" name="Fft64.h" compile="0" resource="0" file="Source/dsp/Fft64.h"/>
+        <FILE id="dspFftC" name="Fft64.cpp" compile="1" resource="0" file="Source/dsp/Fft64.cpp"/>
+        <FILE id="dspWinH" name="Window.h" compile="0" resource="0" file="Source/dsp/Window.h"/>
+        <FILE id="dspWolH" name="Wola64.h" compile="0" resource="0" file="Source/dsp/Wola64.h"/>
+        <FILE id="dspOvsH" name="OverlapSave64.h" compile="0" resource="0"
+              file="Source/dsp/OverlapSave64.h"/>
+        <FILE id="dspDlyH" name="DelayLine64.h" compile="0" resource="0" file="Source/dsp/DelayLine64.h"/>
+        <FILE id="dspCtsH" name="ControlSmoother.h" compile="0" resource="0"
+              file="Source/dsp/ControlSmoother.h"/>
+        <FILE id="dspMthH" name="DspMath.h" compile="0" resource="0" file="Source/dsp/DspMath.h"/>
+        <FILE id="dspFdsH" name="FilterDesign.h" compile="0" resource="0" file="Source/dsp/FilterDesign.h"/>
+        <FILE id="dspFdsC" name="FilterDesign.cpp" compile="1" resource="0"
+              file="Source/dsp/FilterDesign.cpp"/>
+        <FILE id="dspBqdH" name="Biquad64.h" compile="0" resource="0" file="Source/dsp/Biquad64.h"/>
+        <FILE id="dspFbdH" name="FixedBand.h" compile="0" resource="0" file="Source/dsp/FixedBand.h"/>
+        <FILE id="dspFbdC" name="FixedBand.cpp" compile="1" resource="0" file="Source/dsp/FixedBand.cpp"/>
+        <FILE id="dspTapH" name="TapeChannel.h" compile="0" resource="0" file="Source/dsp/TapeChannel.h"/>
+        <FILE id="dspTapC" name="TapeChannel.cpp" compile="1" resource="0"
+              file="Source/dsp/TapeChannel.cpp"/>
+        <FILE id="dspBrkH" name="Bark.h" compile="0" resource="0" file="Source/dsp/Bark.h"/>
+        <FILE id="dspBrkC" name="Bark.cpp" compile="1" resource="0" file="Source/dsp/Bark.cpp"/>
+        <FILE id="dspAtyH" name="AtypeEngine.h" compile="0" resource="0" file="Source/dsp/AtypeEngine.h"/>
+        <FILE id="dspAtyC" name="AtypeEngine.cpp" compile="1" resource="0"
+              file="Source/dsp/AtypeEngine.cpp"/>
+        <FILE id="dspMcH" name="ModulationControl.h" compile="0" resource="0"
+              file="Source/dsp/ModulationControl.h"/>
+        <FILE id="dspMcC" name="ModulationControl.cpp" compile="1" resource="0"
+              file="Source/dsp/ModulationControl.cpp"/>
+        <FILE id="dspCalH" name="Calibration.h" compile="0" resource="0" file="Source/dsp/Calibration.h"/>
+        <FILE id="dspCalC" name="Calibration.cpp" compile="1" resource="0"
+              file="Source/dsp/Calibration.cpp"/>
+        <FILE id="dspSldH" name="SlidingLayer.h" compile="0" resource="0" file="Source/dsp/SlidingLayer.h"/>
+        <FILE id="dspSldC" name="SlidingLayer.cpp" compile="1" resource="0"
+              file="Source/dsp/SlidingLayer.cpp"/>
+        <FILE id="dspStgH" name="SrStage.h" compile="0" resource="0" file="Source/dsp/SrStage.h"/>
+        <FILE id="dspSscH" name="SrSideChain.h" compile="0" resource="0" file="Source/dsp/SrSideChain.h"/>
+        <FILE id="dspSscC" name="SrSideChain.cpp" compile="1" resource="0"
+              file="Source/dsp/SrSideChain.cpp"/>
+        <FILE id="dspSlwH" name="GainSlew.h" compile="0" resource="0" file="Source/dsp/GainSlew.h"/>
+        <FILE id="dspSpbH" name="SpectrumProbe.h" compile="0" resource="0"
+              file="Source/dsp/SpectrumProbe.h"/>
+        <FILE id="dspShbH" name="ShelvingBank64.h" compile="0" resource="0"
+              file="Source/dsp/ShelvingBank64.h"/>
+        <FILE id="dspEngH" name="SrEngine.h" compile="0" resource="0" file="Source/dsp/SrEngine.h"/>
+        <FILE id="dspEngC" name="SrEngine.cpp" compile="1" resource="0" file="Source/dsp/SrEngine.cpp"/>
+        <FILE id="dspCmpH" name="CompressionLaw.h" compile="0" resource="0"
+              file="Source/dsp/CompressionLaw.h"/>
+        <FILE id="dspXfdH" name="Crossfade.h" compile="0" resource="0" file="Source/dsp/Crossfade.h"/>
+        <FILE id="dspFrdH" name="FractionalDelay64.h" compile="0" resource="0"
+              file="Source/dsp/FractionalDelay64.h"/>
+        <FILE id="dspPhrH" name="PhaseRotator.h" compile="0" resource="0" file="Source/dsp/PhaseRotator.h"/>
+        <FILE id="dspPhrC" name="PhaseRotator.cpp" compile="1" resource="0"
+              file="Source/dsp/PhaseRotator.cpp"/>
+      </GROUP>
+      <GROUP id="{1A2B3C4D-0002-4000-8000-000000000002}" name="tests">
+        <FILE id="tstDspC" name="DspTests.cpp" compile="0" resource="0" file="Source/tests/DspTests.cpp"/>
+        <FILE id="tstCalC" name="CalibrationTests.cpp" compile="0" resource="0"
+              file="Source/tests/CalibrationTests.cpp"/>
+        <FILE id="tstTapC" name="TapeTests.cpp" compile="0" resource="0" file="Source/tests/TapeTests.cpp"/>
+        <FILE id="tstBrkC" name="BarkTests.cpp" compile="0" resource="0" file="Source/tests/BarkTests.cpp"/>
+        <FILE id="tstAtyC" name="AtypeTests.cpp" compile="0" resource="0" file="Source/tests/AtypeTests.cpp"/>
+        <FILE id="tstPhsC" name="PhaseTests.cpp" compile="0" resource="0" file="Source/tests/PhaseTests.cpp"/>
+      </GROUP>
+    </GROUP>
+  </MAINGROUP>
+  <MODULES>
+    <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_plugin_client" showAllCode="1" useLocalCopy="0"
+            useGlobalPath="1"/>
+    <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_processors_headless" showAllCode="1" useLocalCopy="0"
+            useGlobalPath="1"/>
+    <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_dsp" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+  </MODULES>
+  <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1" JUCE_VST3_CAN_REPLACE_VST2="0"/>
+  <EXPORTFORMATS>
+    <XCODE_MAC targetFolder="Builds/MacOSX">
+      <CONFIGURATIONS>
+        <CONFIGURATION isDebug="1" name="Debug" targetName="Lime" enablePluginBinaryCopyStep="0"
+                       macOSDeploymentTarget="10.13"/>
+        <CONFIGURATION isDebug="0" name="Release" targetName="Lime" enablePluginBinaryCopyStep="0"
+                       macOSDeploymentTarget="10.13"/>
+      </CONFIGURATIONS>
+      <MODULEPATHS>
+        <MODULEPATH id="juce_audio_basics" path=""/>
+        <MODULEPATH id="juce_audio_devices" path=""/>
+        <MODULEPATH id="juce_audio_formats" path=""/>
+        <MODULEPATH id="juce_audio_plugin_client" path=""/>
+        <MODULEPATH id="juce_audio_processors" path=""/>
+        <MODULEPATH id="juce_audio_processors_headless" path=""/>
+        <MODULEPATH id="juce_audio_utils" path=""/>
+        <MODULEPATH id="juce_core" path=""/>
+        <MODULEPATH id="juce_data_structures" path=""/>
+        <MODULEPATH id="juce_dsp" path=""/>
+        <MODULEPATH id="juce_events" path=""/>
+        <MODULEPATH id="juce_graphics" path=""/>
+        <MODULEPATH id="juce_gui_basics" path=""/>
+        <MODULEPATH id="juce_gui_extra" path=""/>
+      </MODULEPATHS>
+    </XCODE_MAC>
+  </EXPORTFORMATS>
+</JUCERPROJECT>

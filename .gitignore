@@ -1,0 +1,168 @@
+# ==============================================================================
+#  Lime — what does not belong in the repository.
+#
+#  The rule applied throughout: anything a build or a tool regenerates is ignored;
+#  anything a person wrote or decided is tracked. The CMake build regenerates the
+#  exporter output, so everything under Lime/Builds/ stays out.
+# ==============================================================================
+
+# --- Build output -------------------------------------------------------------
+# Everything the CMake build or a JUCE exporter generates.
+build/
+Build/
+build-*/
+DerivedData/
+Lime/Builds/
+Builds/**/build/
+Builds/VisualStudio*/x64/
+Builds/VisualStudio*/Win32/
+Builds/LinuxMakefile/build/
+
+# --- Compiled artefacts -------------------------------------------------------
+*.o
+*.obj
+*.lo
+*.slo
+*.d
+*.dwo
+*.gch
+*.pch
+*.ilk
+*.pdb
+*.a
+*.lai
+*.la
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+
+# --- Built plug-ins and applications ------------------------------------------
+# The formats themselves are bundles, so they are directories on macOS.
+*.app/
+*.vst3/
+*.vst/
+*.component/
+*.aaxplugin/
+*.lv2/
+*.au/
+*.dSYM/
+*.dSYM.zip
+
+# --- Xcode --------------------------------------------------------------------
+# Per-user window state, schemes and breakpoints.
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.xcworkspace/contents.xcworkspacedata
+*.moved-aside
+*.hmap
+*.ipa
+*.perspectivev3
+*.mode1v3
+*.mode2v3
+*.pbxuser
+
+# --- macOS --------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.fseventsd
+.apdisk
+Icon?
+
+# --- Windows / Linux desktop leftovers ----------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.directory
+.Trash-*
+*~
+.nfs*
+
+# --- Editors and language servers ---------------------------------------------
+.vscode/
+.idea/
+.cache/
+.clangd/
+.ccls-cache/
+compile_commands.json
+*.swp
+*.swo
+cmake-build-*/
+tags
+TAGS
+
+# --- CMake --------------------------------------------------------------------
+CMakeFiles/
+CMakeCache.txt
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+Testing/
+
+# --- Standalone DSP test binaries ---------------------------------------------
+# Source/tests/*.cpp each build to their own executable; the sources are tracked,
+# the executables are not. They have no extension, so they are named explicitly
+# rather than caught by a wildcard that would also swallow real files.
+DspTests
+CalibrationTests
+TapeTests
+BarkTests
+AtypeTests
+PhaseTests
+
+# --- Local working notes -------------------------------------------------------
+# Private planning and scratch files that live beside the repo but not in it.
+linkedin.txt
+RELEASE-PLAN.md
+
+# --- Documents ----------------------------------------------------------------
+# No PDFs in the repository, generated or otherwise. The manual's *source* is tracked
+# as MANUAL.md, which reads on the web and diffs like text; the PDF is a build product
+# of it and is rebuilt in one command (see README). The reference papers are 70 MB of
+# scan and stay out of band entirely.
+*.pdf
+
+# What LaTeX leaves behind when the manual is rendered by hand rather than by pandoc.
+*.aux
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+*.log
+
+# --- Audio scratch ------------------------------------------------------------
+# Renders and captures made while testing. Anything deliberately kept as reference
+# material should be committed with a name that says so, or force-added.
+*.wav
+*.aif
+*.aiff
+*.caf
+*.flac
+!docs/**/*.wav
+
+# --- Reference documents ------------------------------------------------------
+# The technical documents the DSP was written against are kept out of band: 70 MB of
+# scanned PDF that every clone would otherwise pay for. They stay out on purpose, and
+# this rule is what stops a `git add -A` or a directory sync from quietly restoring
+# them. The constants in Source/dsp cite them by section instead, so they can be
+# checked by anyone holding a copy.
+papers/
