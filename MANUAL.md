@@ -1,6 +1,6 @@
 # Lime
 
-**Spectral companding dynamics processor — user manual** · Aptitude Audio · v1.0.3
+**Spectral companding dynamics processor — user manual** · Aptitude Audio · v1.0.4
 
 # What Lime is
 
@@ -11,7 +11,7 @@ The forward pass compresses the signal's dynamic range from both ends at once: q
 is lifted, and the extremes near saturation are eased. The reverse pass is its exact
 complement, and expands both back out. Run one pass alone and Lime is an insert: **up** is
 a many-band upward compressor, raising low-level detail against everything around it, and
-**down** is the matching expander, pushing it back away.
+**down** is the matching downward expander, pushing it back away.
 
 The lift is not a fixed EQ curve and not a single compressor. The spectrum is divided into
 bands; each band carries its own stack of level-dependent stages; each stage acts only where
@@ -70,8 +70,8 @@ default.
 
 # Installing
 
-Lime is distributed as source; the two-command build in the README produces both plug-in
-formats, and they install here:
+Lime is distributed as source; one command at the repository root — `make all` — builds,
+tests, installs and validates, and the plug-in formats install here:
 
 ```
 ~/Library/Audio/Plug-Ins/Components/Lime.component     Audio Unit
@@ -107,7 +107,7 @@ its own section below.
 
 Every switch is in one column to the right of the rows: **process** and **mode** on the top
 two lines, and **polarity**, **auto** and **bypass** on the third. The line under it all
-reads *Aptitude Audio | Lime | v1.0.3*.
+reads *Aptitude Audio | Lime | v1.0.4*.
 
 ## process — off / a / b
 
@@ -327,8 +327,10 @@ does not null until it lands.
 
 What the knobs buy audibly: a 20 ms up release restores the lift after a loud event
 14.7 dB sooner than a 2 s one within the measurement window (7.4 dB in the **a**
-process), and a 1 s up attack sheds the lift 8.4 dB later than a 1 ms one — slower
-withdrawal into loud material, faster recovery out of it, or the reverse, per half.
+process). Attack works the same way in the other direction — a slower setting sheds the
+lift later into loud entries, measured at 8.4 dB across the library's wider test span —
+so each half offers slower withdrawal into loud material, faster recovery out of it, or
+the reverse.
 
 ## the s/c filters, from the host
 
@@ -458,7 +460,8 @@ exaggerated rather than diluted. Put it back to 100% before doing any real work.
 ## To use it as an insert — one instance
 
 1. **process b**, **mode up**, on a track or bus.
-2. Set **mix** for the amount — 100% is the full lift, below it a blend.
+2. Set **mix** for the amount — from your host's parameter list, since it is not a panel
+   knob — 100% is the full lift, below it a blend.
 3. Listen for what rises: tails, room, the small events the mix was sitting on.
 
 **down** is the same insert leaning the other way. Neither needs decoding — an insert is a
@@ -719,4 +722,4 @@ It is stated here rather than omitted because it is a real shortfall against the
 
 ---
 
-*Aptitude Audio | Lime | v1.0.3*
+*Aptitude Audio | Lime | v1.0.4*

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.4
+
+- A documentation release — no code changes. The down pass carries its full name
+  everywhere: **downward expander**, verified against the engine's measured static curve
+  (the up pass only ever boosts, hardest on quiet material, shrinking a 70 dB input range
+  to 50.6 dB — an upward compressor; the down pass only ever attenuates the same
+  material, growing 70 dB to 89.6 dB — an expander whose gain moves downward).
+  Compression and expansion name what happens to the range; upward and downward name
+  where the gain goes.
+- The manual and README were reconciled with the shipped state: the one-command
+  `make all` flow replaces stale two-command references, the attack audibility figure is
+  attributed to the library's test span rather than to knob positions the 1–100 ms range
+  cannot reach, the tools preflight is claimed only for the build targets that run it,
+  and the README's architecture table gains the `WetLowPass` row its fellow unwired
+  library components already had.
+
 ## 1.0.3
 
 - The four time-constant knobs are now **always in circuit**. The `Up Times On` and

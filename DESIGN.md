@@ -2144,4 +2144,28 @@ and both stock defaults back at noon where this panel likes them.
 ### State
 
 Check counts are unchanged — **698 checks passing** across the six suites, `DspTests` at
-389 — and `auval` passes at 1.0.3. This is the final release.
+389 — and `auval` passes at 1.0.3.
+
+---
+
+## v1.0.4 — the words
+
+A documentation release; no code changed. Its one finding is worth its own record: asked
+whether "upward compressor" was the wrong name for the up pass, the answer came from the
+engine rather than from taxonomy debate. Measured on a steady 1 kHz tone, the up pass's
+gain is always positive — +20.5 dB at −80 dB input, +1.1 dB at −10 — and a 70 dB input
+range leaves as 50.6 dB: gain that rises, range that shrinks, which is upward
+compression by definition. The down pass mirrors it exactly — gain always negative,
+70 dB in becomes 89.6 dB out — expansion whose gain moves downward. The nouns name what
+happens to the range; the modifiers name where the gain goes. So the up pass kept its
+name, and the down pass gained the direction word it had been missing — **downward
+expander** — everywhere it is described. The remaining changes reconciled the manual and
+README with the shipped state: the one-command `make all` flow, the attack figure
+attributed to the library's test span rather than to unreachable knob positions, the
+tools preflight claimed only for the targets that run it, and the `WetLowPass` row in
+the architecture table.
+
+### State
+
+**698 checks passing** across the six suites, `DspTests` at 389; `auval` passes at
+1.0.4. This is the final release.

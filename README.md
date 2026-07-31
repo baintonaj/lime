@@ -18,7 +18,7 @@ dynamic range from both ends at once — quiet detail is lifted, extremes near s
 are eased — and the reverse pass is its exact complement, expanding both back out. Run
 the passes separately and it is an insert: **Up** mode is a many-band upward compressor
 that raises low-level detail against everything around it, **Down** the matching
-expander that pushes it back away. Run them as a pair around something lossy — tape, an
+downward expander that pushes it back away. Run them as a pair around something lossy — tape, an
 analogue insert, a codec round trip — and the compression rides the signal above the
 channel's floor while the expansion takes the channel's noise down with it, which is the
 noise-reduction duty the architecture was originally published for.
@@ -41,7 +41,7 @@ the project. See [The central constraint](#the-central-constraint).
 
 ## Status
 
-Version 1.0.3. Working and testable in a host, with every claim below backed by a check in
+Version 1.0.4. Working and testable in a host, with every claim below backed by a check in
 the six standalone suites — **698 checks passing**, runnable with one `ctest`.
 
 One design target is **not** met: the encode → decode round trip should null to better than
@@ -52,7 +52,8 @@ omitted because it is a real shortfall. See [Open work](#open-work).
 
 ## Requirements
 
-- macOS 10.13 or later; the build is universal (Apple silicon and Intel).
+- macOS 10.13 or later; Apple silicon and Intel (`make universal` builds both
+  architectures in one binary; plain `make` builds native).
 - CMake ≥ 3.22 (fetches JUCE 9.0.0 itself), or Xcode plus a JUCE 9 checkout for the
   Projucer route.
 - The DSP library and its test suites need no JUCE at all — a C++20 compiler is enough.
@@ -79,7 +80,7 @@ the size it is.
 Lime is distributed as source only — there are no pre-built downloads; the commands below
 produce everything the plugin ships as. Two tools are needed and neither ships on a fresh
 Mac: the Xcode Command Line Tools for the C++ compiler (`xcode-select --install`) and
-CMake (`brew install cmake`, or [cmake.org](https://cmake.org/download/)). Every make
+CMake (`brew install cmake`, or [cmake.org](https://cmake.org/download/)). Every build
 target checks for both first and names the one that is missing. The quickest route is the
 Makefile:
 
@@ -170,7 +171,7 @@ Lime/Source/*.h,*.cpp     the plug-in wrapper and the panel
 Lime/Source/tests/        six standalone test binaries
 Lime/Lime.jucer           Projucer project (secondary; CMake is primary)
 CMakeLists.txt            plug-in, DSP library and test suites
-Makefile                  convenience wrapper: make / make test / make install
+Makefile                  convenience wrapper: make all in one word, or build / test / install / help
 MANUAL.md                 the user manual
 DESIGN.md                 the design record — every decision, every measurement
 CHANGELOG.md              release history
@@ -216,6 +217,7 @@ why something is the way it is, the answer is in there.
 | `Bark` | critical-band mapping and the masking spread function |
 | `PhaseRotator` | constant phase rotation, 0 to 180 degrees, via a 90-degree phase-difference network — library component, not wired into the released plug-in |
 | `FractionalDelay64` | sub-sample delay, third-order Lagrange — library component, not wired into the released plug-in |
+| `WetLowPass` | 18 dB/oct Butterworth low-pass with DSP-side corner smoothing — library component, not wired into the released plug-in |
 | `Crossfade` | the shaped, finite ramp a change of process or mode fades across |
 | `CompressionLaw` | the knee shared by the fixed band and the sliding layer |
 | `SrEngine` | top level: main path, both halves, encode/decode/both, alignment |
