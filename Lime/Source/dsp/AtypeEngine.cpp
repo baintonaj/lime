@@ -38,6 +38,8 @@
 
 #include "AtypeEngine.h"
 
+#include "DspMath.h"
+
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -332,6 +334,54 @@ void AtypeEngine::setPeakOperatingLevel (double amplitude) noexcept
 {
     if (amplitude > 0.0)
         peakLevel = amplitude;
+}
+
+void AtypeEngine::setSidechainHighPass (double cornerHz) noexcept
+{
+    // A static control costs nothing: four magnitudes rebuild only on a move.
+    if (cornerHz == detectorHighPassHz)
+        return;
+
+    detectorHighPassHz = cornerHz;
+    rebuildDetectorWeights();
+}
+
+void AtypeEngine::setSidechainLowPass (double cornerHz) noexcept
+{
+    if (cornerHz == detectorLowPassHz)
+        return;
+
+    detectorLowPassHz = cornerHz;
+    rebuildDetectorWeights();
+}
+
+void AtypeEngine::rebuildDetectorWeights() noexcept
+{
+    // Each band is represented by the geometric centre of its nominal range,
+    // the audio band's own edges standing in where a band runs out to one: the
+    // 80 Hz low-pass from 20 Hz, bands 3 and 4 up to 20 kHz. A band-pass has no
+    // single frequency, but its log midpoint is where its energy is judged
+    // from, and four scalars is what a four-band side chain can carry. The two
+    // corners multiply, as they do per bin in the spectral side chains.
+    const double centres[numBands] = {
+        std::sqrt (20.0 * atypeBands::band1CornerHz),
+        std::sqrt (atypeBands::band1CornerHz * atypeBands::band3CornerHz),
+        std::sqrt (atypeBands::band3CornerHz * 20000.0),
+        std::sqrt (atypeBands::band4CornerHz * 20000.0)
+    };
+
+    for (int b = 0; b < numBands; ++b)
+    {
+        double weight = 1.0;
+
+        if (detectorHighPassHz > 0.0)
+            weight *= butterworth3Magnitude (centres[b], detectorHighPassHz, true);
+
+        if (detectorLowPassHz > 0.0)
+            weight *= butterworth3Magnitude (centres[b], detectorLowPassHz, false);
+
+        detectorWeight[(size_t) b] = weight;
+    }
 }
 
 void AtypeEngine::prepare (double sampleRate, int maxBlockSize, int numChannels)
@@ -669,8 +719,12 @@ void AtypeEngine::process (double* const* channelData, int numChannels, int numS
                 io[n] = v + differential;
             }
 
+            // The detectors read through the side-chain high pass; the band
+            // signals themselves — and the differential built from them — do
+            // not. Encoder and decoder scale identically, so the states they
+            // derive from the recovered v stay in lockstep.
             for (int b = 0; b < numBands; ++b)
-                updateControl (c.state[(size_t) b], band[b]);
+                updateControl (c.state[(size_t) b], band[b] * detectorWeight[(size_t) b]);
         }
     }
 

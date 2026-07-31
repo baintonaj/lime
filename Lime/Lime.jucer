@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <JUCERPROJECT id="Up1RVG" name="Lime" projectType="audioplug" useAppConfig="0"
-              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" version="1.0.0"
+              addUsingNamespaceToJuceHeader="0" jucerFormatVersion="1" version="1.0.1"
               companyName="Aptitude Audio" companyCopyright="Andy Bainton (Aptitude Audio)"
               companyEmail="" companyWebsite="https://github.com/baintonaj/lime"
               pluginFormats="buildAU,buildStandalone,buildVST3"
@@ -34,6 +34,8 @@
         <FILE id="dspDlyH" name="DelayLine64.h" compile="0" resource="0" file="Source/dsp/DelayLine64.h"/>
         <FILE id="dspCtsH" name="ControlSmoother.h" compile="0" resource="0"
               file="Source/dsp/ControlSmoother.h"/>
+        <FILE id="dspWlpH" name="WetLowPass.h" compile="0" resource="0"
+              file="Source/dsp/WetLowPass.h"/>
         <FILE id="dspMthH" name="DspMath.h" compile="0" resource="0" file="Source/dsp/DspMath.h"/>
         <FILE id="dspFdsH" name="FilterDesign.h" compile="0" resource="0" file="Source/dsp/FilterDesign.h"/>
         <FILE id="dspFdsC" name="FilterDesign.cpp" compile="1" resource="0"

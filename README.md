@@ -41,8 +41,8 @@ the project. See [The central constraint](#the-central-constraint).
 
 ## Status
 
-Version 1.0.0. Working and testable in a host, with every claim below backed by a check in
-the six standalone suites — **652 checks passing**, runnable with one `ctest`.
+Version 1.0.1. Working and testable in a host, with every claim below backed by a check in
+the six standalone suites — **684 checks passing**, runnable with one `ctest`.
 
 One design target is **not** met: the encode → decode round trip should null to better than
 −100 dB and manages about −80 dB on steady tones, −51 dB on dense broadband material near

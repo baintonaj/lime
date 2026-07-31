@@ -30,6 +30,24 @@ inline double onePoleMagnitude (double hz, double cornerHz, bool highPass) noexc
     return highPass ? lowPass * ratio : lowPass;
 }
 
+/** Magnitude of a third-order Butterworth high- or low-pass at a frequency.
+
+    |H|^2 = 1 / (1 + r^6) with r the frequency ratio — the analog prototype's
+    maximally flat magnitude, 18 dB an octave beyond the corner and exactly
+    -3.01 dB on it. This is a *weight*, not a filter: the callers sample it onto
+    detection levels and band grids, so there is no state and no bilinear
+    transform to warp it. `cornerHz` must be positive. */
+inline double butterworth3Magnitude (double hz, double cornerHz, bool highPass) noexcept
+{
+    if (highPass && hz <= 0.0)
+        return 0.0;
+
+    const double ratio = highPass ? cornerHz / hz : hz / cornerHz;
+    const double r2 = ratio * ratio;
+
+    return 1.0 / std::sqrt (1.0 + r2 * r2 * r2);
+}
+
 /** Per-frame one-pole coefficient for a time constant quoted in milliseconds.
 
     The convention is exp(-T/tau) — the fraction *kept* each frame — for use as

@@ -1,6 +1,6 @@
 # Lime
 
-**Spectral companding dynamics processor — user manual** · Aptitude Audio · v1.0.0
+**Spectral companding dynamics processor — user manual** · Aptitude Audio · v1.0.1
 
 # What Lime is
 
@@ -93,14 +93,15 @@ Reading order, top to bottom: what the process is doing to the signal, said as a
 two rows of knobs with every switch in one column beside them; then identity and level.
 
 The top row of knobs belongs to the two passes — **up in** and **up out**, then **down in**
-and **down out**, each pair around its own pass. Beneath them, centred so the block reads
-as an inverted trapezoid, is the plugin's own row, in the order the signal meets it:
-**input**, then **mix**, which blends the processed path against the dry one, then
-**output**.
+and **down out**, each pair around its own pass. Beneath them is the plugin's own row of
+four: **s/c hpf** and **s/c lpf**, which band-limit what the level detection hears, then
+the channel trims **input** and **output**. Mix is no longer on the panel — the parameter
+remains, reached from the host, and has its own section below.
 
 Every switch is in one column to the right of both rows: **process** and **mode** on the top
-two lines, **polarity**, **auto** and **bypass** on the third. The line under it all reads
-*Aptitude Audio | Lime | v1.0.0*.
+two lines, **polarity**, **auto** and **bypass** on the third, and the **s/c filters** line
+last — the HPF and LPF switches, level with the knob row they switch. The line under it all
+reads *Aptitude Audio | Lime | v1.0.1*.
 
 ## process — off / a / b
 
@@ -272,9 +273,43 @@ They are not the calibration trims and should not be used as them. The trims exi
 the process see the same level on the way back that it produced on the way out; these exist
 to match the plugin to whatever is either side of it in the session.
 
+## s/c hpf and s/c lpf
+
+A high-pass and a low-pass filter on the **level detection** — the classic side-chain
+pair, each with its own switch on the **s/c filters** line. They filter what every
+compressor stage *hears*, never the audio: no signal, wet or dry, passes through either.
+Each weighting is a third-order Butterworth response, 18 dB per octave, −3 dB exactly at
+its corner, and both corners run from 20 Hz to 20 kHz; engaged together, the two multiply
+and band-limit the detection.
+
+**A filter does nothing until its switch is on**, and both switches rest off. A fresh
+instance detects with the full band — with both switches off the detection is exactly what
+it was in v1.0.0 — and the knobs' resting positions, 80 Hz for the high pass and 6 kHz for
+the low pass, each straight up, are corners held in readiness rather than filters in
+circuit. Throwing the switch is what puts a filter in the detection path, and the throw is
+eased in at the same pace as a corner move rather than stepped.
+
+Below an engaged high-pass corner — or above an engaged low-pass one — the programme reads
+quieter to the detectors than it is, and the process answers as it always does when
+something reads quiet: it treats it. Raise the high-pass corner in **up** and more of the
+low end takes the lift; lower the low-pass corner and the top takes it instead; in
+**down** the matching expander pushes the same regions further away. The plot follows
+directly, because the gains it draws are the gains the knobs are changing.
+
+**Any setting leaves the round trip exact.** Both passes weight their detection
+identically, so whatever the encoder does under one pair of corners the decoder undoes
+under the same pair. The one discipline is agreement, as with the trims: an encode and its
+decode must see the same filters — switch states and corners both — so for two-instance
+work set them the same at both ends.
+
 ## mix
 
-Blends the processed path against the dry one, 0 to 200%.
+**Mix is not a panel control.** It is a parameter, reachable from your host's parameter
+list or an automation lane; its knob went to the side-chain pair, and it is left off the
+panel deliberately — its working setting for the round trip is its default, and what it
+does beyond that is a mastering and parallel-processing job, not a knob to reach for while
+calibrating. The capability is intact and unchanged: it blends the processed path against
+the dry one, 0 to 200%.
 
 - **0%** — the dry signal, delayed to match. Identical to bypass.
 - **100%** — the processed signal. Default.
@@ -283,8 +318,7 @@ Blends the processed path against the dry one, 0 to 200%.
   setting is actually up to.
 
 **Anything but 100% breaks the round trip.** A partly encoded signal is not something a
-decoder can undo, so for real two-instance work this stays at 100. It is a mastering and
-parallel-processing control, not a calibration one.
+decoder can undo, so for real two-instance work this stays at 100.
 
 ## polarity
 
@@ -629,4 +663,4 @@ It is stated here rather than omitted because it is a real shortfall against the
 
 ---
 
-*Aptitude Audio | Lime | v1.0.0*
+*Aptitude Audio | Lime | v1.0.1*

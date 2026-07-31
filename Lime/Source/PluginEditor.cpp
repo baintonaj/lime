@@ -70,11 +70,17 @@ LimeAudioProcessorEditor::LimeAudioProcessorEditor (LimeAudioProcessor& p)
     setUpTrim (playIn, "playIn", "down in");
     setUpTrim (playOut, "playOut", "down out");
 
-    // The bottom row, in the order the signal meets it: in, then the blend against
-    // dry, then out. Mix carries two decimals and needs a wider box for them —
-    // "100.00 %" is three characters longer than anything the trims print.
+    // The bottom row: the two side-chain filters that shape what the level
+    // detection hears, then the channel gains. Both filters carry two decimals in
+    // kilohertz — "12.50 kHz" is three characters longer than anything the trims
+    // print — so they share the wider box the mix knob used to need.
+    //
+    // Mix is deliberately not on the panel any more: the low pass took its knob.
+    // The parameter remains — reachable from the host's list, automatable, and
+    // defaulting to fully wet — the same arrangement Set Up has.
+    setUpTrim (scHpf, "scHpf", "s/c hpf", 2, 96);
+    setUpTrim (scLpf, "scLpf", "s/c lpf", 2, 96);
     setUpTrim (inputGain, "inputGain", "input");
-    setUpTrim (mix, "mix", "mix", 2, 96);
     setUpTrim (outputGain, "outputGain", "output");
 
     setUpSelector (processSelector, "process", "process");
@@ -99,6 +105,19 @@ LimeAudioProcessorEditor::LimeAudioProcessorEditor (LimeAudioProcessor& p)
     // Auto makeup: a dynamics unit without it makes every comparison a loudness
     // test. See AutoGain for what it matches and how slowly.
     setUpToggle (autoGainButton, "autoGain", switchLegend ("auto"), autoGainAttachment);
+
+    // The side-chain filters' switches. Both rest off — the knobs hold corners in
+    // readiness, and one of these is what puts a filter in the detection path —
+    // so the row carries a caption naming what the pair belongs to.
+    setUpToggle (scHpfButton, "scHpfOn", switchLegend ("hpf"), scHpfOnAttachment);
+    setUpToggle (scLpfButton, "scLpfOn", switchLegend ("lpf"), scLpfOnAttachment);
+
+    scFilterCaption.setText ("s/c filters", juce::dontSendNotification);
+    scFilterCaption.setFont (juce::Font (juce::FontOptions (captionFontSize, juce::Font::plain)));
+    scFilterCaption.setColour (juce::Label::textColourId, text());
+    scFilterCaption.setJustificationType (juce::Justification::centredLeft);
+    scFilterCaption.setBufferedToImage (true);
+    addAndMakeVisible (scFilterCaption);
 
     addAndMakeVisible (brandingLabel);
     brandingLabel.setText ("Aptitude Audio | Lime | v" + juce::String (JucePlugin_VersionString),
@@ -359,11 +378,11 @@ void LimeAudioProcessorEditor::resized()
 
     const int rowHeight = knobSize + textBoxHeight + captionHeight;
 
-    // Two rows, bottom up. The masters go under the calibration trims rather than beside
-    // them: eight knobs abreast would have made the panel half as wide again as the plot
-    // needs, and the two groups are not the same kind of control. The top row is what is set
-    // once against a channel — the trims, and how finely the band split is resolved. The
-    // bottom row is the plugin's own, reached for while listening.
+    // Two rows, bottom up. The plugin's own row goes under the calibration trims rather
+    // than beside them: eight knobs abreast would have made the panel half as wide again
+    // as the plot needs, and the two groups are not the same kind of control. The top
+    // row is what is set once against a channel — the trims, and how finely the band
+    // split is resolved. The bottom row is the plugin's own, reached for while listening.
     auto masterRow = inner.removeFromBottom (rowHeight);
     inner.removeFromBottom (gap);
     auto trimRow = inner.removeFromBottom (rowHeight);
@@ -388,17 +407,14 @@ void LimeAudioProcessorEditor::resized()
         trim.caption.setBounds (cell);
     };
 
-    // Four over three, the three centred under the four — the knob block reads as
-    // an inverted trapezoid, wide row of pass trims above, the masters tucked
-    // beneath. The half-pitch inset is what centres a row of three on a grid of
-    // four.
+    // Two aligned rows of four, each filling the grid exactly — the pass trims above,
+    // the plugin's own row directly beneath, every knob sharing a column with the one
+    // over it.
     for (auto* trim : { &recIn, &recOut, &playIn, &playOut })
         if (trimRow.getWidth() >= gridPitch)
             placeTrim (*trim, trimRow.removeFromLeft (gridPitch));
 
-    masterRow.removeFromLeft (gridPitch / 2);
-
-    for (auto* trim : { &inputGain, &mix, &outputGain })
+    for (auto* trim : { &scHpf, &scLpf, &inputGain, &outputGain })
         if (masterRow.getWidth() >= gridPitch)
             placeTrim (*trim, masterRow.removeFromLeft (gridPitch));
 
@@ -441,16 +457,17 @@ void LimeAudioProcessorEditor::resized()
         placeRow (cell, items);
     };
 
-    // Three rows in the switch column: the two selectors, then the two plain toggles side by
-    // side. Each row is a caption slot over a row of switches, so every switch on the panel
-    // sits on one of three shared baselines.
+    // Four rows in the switch column: the two selectors, the three plain toggles side by
+    // side, then the side-chain filters' switches under their own caption. Each row is a
+    // caption slot over a row of switches, so every switch on the panel sits on one of
+    // four shared baselines.
     {
         auto column = switchColumn;
 
-        // Three rows sharing the full height, each a caption slot over its switches. The
-        // toggles keep an empty caption slot rather than growing into it, so all nine
-        // switch positions sit on the same three baselines.
-        const int rows = 3;
+        // Four rows sharing the full height, each a caption slot over its switches. The
+        // plain toggles keep an empty caption slot rather than growing into it, so every
+        // switch position sits on one of the same four baselines.
+        const int rows = 4;
         const int available = column.getHeight() - (rows - 1) * gap;
         const int rowStep = available / rows;
 
@@ -463,6 +480,15 @@ void LimeAudioProcessorEditor::resized()
         toggles.removeFromTop (captionHeight);
 
         placeRow (toggles, { &polarityButton, &autoGainButton, &bypassButton });
+
+        column.removeFromTop (gap);
+
+        // The filters' row sits last, level with the knobs it switches: the corners
+        // live on the bottom knob row, and these are what put them in the path.
+        auto filters = column.removeFromTop (rowStep);
+        scFilterCaption.setBounds (filters.removeFromTop (captionHeight));
+
+        placeRow (filters, { &scHpfButton, &scLpfButton });
     }
 
     inner.removeFromBottom (gap);

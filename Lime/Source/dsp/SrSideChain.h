@@ -267,6 +267,31 @@ public:
 
     int getSections() const noexcept { return sections; }
 
+    /** High-passes what the compressors' level detection reads; the signal path
+        never passes through it.
+
+        Third-order Butterworth magnitude, sampled per bin onto the detection
+        levels ahead of the stages. Below the corner a bin reads quieter than it
+        is, so the compressors treat it as low-level programme; above the corner
+        detection is untouched. Zero or negative disables the weighting, which is
+        the prepared default.
+
+        Like setSections it changes the encode characteristic, so an encode and
+        its decode have to agree on it — and for the same reason it is pushed to
+        all four side chains by the engine, never set on one alone. Allocation
+        free and a no-op unless the corner actually moved. */
+    void setDetectorHighPass (double cornerHz);
+
+    double getDetectorHighPass() const noexcept { return detectorHighPassHz; }
+
+    /** The matching low pass on the detection: above the corner a bin reads
+        quieter than it is. The two corners multiply into one per-bin weight, so
+        together they band-limit what the compressors hear without either knowing
+        about the other. Same contract as setDetectorHighPass in every respect. */
+    void setDetectorLowPass (double cornerHz);
+
+    double getDetectorLowPass() const noexcept { return detectorLowPassHz; }
+
     void setGainRealisation (GainRealisation r) noexcept { realisation = r; }
     GainRealisation getGainRealisation() const noexcept { return realisation; }
 
@@ -401,6 +426,10 @@ private:
         weighting into the stages. Allocation free once prepare() has sized the vectors. */
     void rebuildBandWeights();
 
+    /** Fills detectorWeight from the current detector high-pass corner. Allocation free
+        once prepare() has sized the vector. */
+    void rebuildDetectorWeights();
+
     /** Rebuilds the per-bin envelope smoothing coefficients. Cheap, and only reached from
         prepare() and the two setters that can change them, so nothing in the frame loop
         has to work out what they are. */
@@ -420,6 +449,12 @@ private:
 
     std::vector<double> bandWeight, lowLevelBoostDb;
     std::vector<double> binHz;   // bin centre frequencies, so the weights can be rebuilt
+
+    // The user's side-chain filters, combined into one per-bin weight on the
+    // detection levels.
+    std::vector<double> detectorWeight;
+    double detectorHighPassHz = 0.0;
+    double detectorLowPassHz = 0.0;
 
     // Each bin's position along the log section grid, in [0,1], and the weight of each
     // section. Split this way so that rebuilding costs one pow per section rather than one

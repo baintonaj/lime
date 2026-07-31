@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.0.1
+
+- Two new knobs — **s/c hpf** and **s/c lpf** — the classic side-chain filters, realised
+  here as a high pass and a low pass on the compressors' level detection rather than
+  filters in any signal path. Each is a third-order Butterworth magnitude (18 dB per
+  octave, −3.01 dB exactly at its corner) applied as a weight: per bin to the detection
+  levels of all four spectral side chains, and per band to the four a-type detectors, each
+  at its band's geometric-centre frequency. Outside the corners the programme reads
+  quieter than it is, so the process treats it as low-level material; the two weights
+  multiply — their decibels add — so together the pair band-limits what the compressors
+  hear; the plot reacts because the computed gains themselves move. Both corners run
+  20 Hz to 20 kHz on skewed knobs whose defaults point straight up — 80 Hz for the high
+  pass, the classic corner, and 6 kHz for the low pass.
+- Each filter has its own switch — `scHpfOn` and `scLpfOn`, both resting **off** — so a
+  fresh instance detects with the full band and the knobs' corners are positions held in
+  readiness rather than filters already in circuit. With a switch off the engines receive
+  no corner at all — unity weighting, identical to the pre-filter behaviour — and a throw
+  is paced by the detection's own time constants and the transfer slew limit, like a
+  corner move.
+- Because encode and decode weight their detection identically, **any corner settings
+  leave the encode/decode round trip exact** — measured, the loop-mode broadband null is
+  −51.6 dB with the high-pass corner at 6 kHz — the same figure as without it — and
+  −57.2 dB with both corners engaged at 200 Hz and 6 kHz; the a-type round trips null at
+  −272.6 and −279.8 dB. The discipline is the section count's: an encode and its decode
+  must agree on the filters — switch states and corners both — so across two instances
+  they are set the same at both ends.
+- The bottom row is four knobs again — **s/c hpf**, **s/c lpf**, **input**, **output** —
+  restoring the four-wide master row; the half-pitch inset that centred the three-knob row
+  is gone. The switch column grew a fourth line for the pair — captioned **s/c filters**,
+  the HPF and LPF switches side by side, level with the knob row it switches. Mix gave up
+  its knob to the low pass and left the panel; the parameter remains, host-visible and
+  automatable, default 100%, with the blend arithmetic and the bit-exact-dry zero
+  unchanged — the arrangement Set Up has always had, deliberately off the panel with the
+  capability intact.
+- A wet-path low-pass was built and measured first and replaced by the side-chain
+  placement; `WetLowPass.h` stays in the DSP library with its tests, wired to nothing. The
+  weighting adds a `butterworth3Magnitude` helper to `DspMath`, and `DspTests` grew
+  `testSidechainHighPass` and `testSidechainLowPass` — prototype magnitudes, the loop
+  nulls with the corners engaged, and the detection-weighting behaviour of both engines.
+
 ## 1.0.0
 
 - A CMake build and continuous integration were added, so the plug-ins and every test

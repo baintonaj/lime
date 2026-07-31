@@ -610,12 +610,12 @@ measured and recorded rather than assumed benign.
 
 ## Final state
 
-**652 checks passing** across six standalone test binaries, plus AU and VST3 building clean
+**684 checks passing** across six standalone test binaries, plus AU and VST3 building clean
 in Debug and Release and `auval` succeeding:
 
 | Suite | Checks | Covers |
 |---|---|---|
-| `DspTests` | 343 | transforms, WOLA, overlap-save, geometry, main path, fixed band, modulation control, sliding layer, gain slew, engine nulls, published curves, auto gain, the probes following the active direction |
+| `DspTests` | 375 | transforms, WOLA, overlap-save, geometry, main path, fixed band, modulation control, sliding layer, gain slew, engine nulls, published curves, auto gain, the probes following the active direction, the wet low pass, the side-chain detection filters |
 | `CalibrationTests` | 81 | pink noise, calibration noise and tone, Auto Compare, detector |
 | `PhaseTests` | 75 | phase rotator (library component) magnitude, rotation difference, inversion, transparency at zero |
 | `TapeTests` | 56 | hiss, saturation asymmetry, HF loss, modulation noise |
@@ -1911,3 +1911,58 @@ portable paths the suites cross-validate against.
 | `TapeTests` | 56 |
 | `BarkTests` | 52 |
 | `AtypeTests` | 45 |
+
+---
+
+## v1.0.1 — the side-chain filter pair
+
+The feature was built twice. The first form was a **low-pass on the wet path** — third-order
+Butterworth in direct-form-I sections because the corner sweeps, prewarped to put the −3 dB
+point on the knob's number — shading the process's harmonics out of a parallel blend. It
+worked as specified and was replaced at the user's direction by the better placement: filter
+what the detection hears, not what the listener does. `WetLowPass` stays in the library with
+its tests, wired to nothing — the precedent the drive knob set.
+
+The shipped form is a pair of knobs — `scHpf` and `scLpf`, "Sidechain HPF" and "Sidechain
+LPF" to the host, **s/c hpf** and **s/c lpf** on the panel — a **high pass and a low pass
+on the compressors' level detection**: third-order Butterworth *magnitudes* —
+`butterworth3Magnitude` in `DspMath` — applied as weights rather than run as filters, so
+there is no bilinear warp and each corner is −3.01 dB exactly. The two weights multiply —
+their decibels add — so together the pair band-limits what the compressors hear. The
+spectral side chains weight per bin, `SrSideChain::setDetectorHighPass` and
+`setDetectorLowPass` fanned out by `SrEngine::setSidechainHighPass` and
+`setSidechainLowPass` exactly as `setSections` is — the weight lands on the `running`
+levels and leaves `pending` untouched, so shared state stays bit-identical — and the
+a-type engine weights each of its four band detectors at the band's geometric-centre
+frequency. Outside the corners the programme reads quieter than it is and the process
+treats it as low-level material; the plot follows, because the gains it draws are the
+gains that moved.
+
+Both filters rest **off** — `scHpfOn` and `scLpfOn`, false by default. The decision is
+resting neutrality: a fresh instance detects with the full band, and the knobs' corners —
+80 Hz and 6 kHz, each at noon — are positions held in readiness rather than filters
+already in circuit, so a filter enters the detection path by deliberate engagement and
+never by default. Off, the engines receive no corner at all — unity weighting, identical
+to the pre-filter behaviour — and a throw is paced by the detection's own time constants
+and the transfer slew limit, exactly as a corner move is.
+
+The property the wet-path form could not have: **any corners leave the round trip exact**,
+because encode and decode weight their detection identically and so compute the same gains
+to apply and to invert. Measured, the loop-mode broadband null is −51.6 dB with the
+high-pass corner at 6 kHz — the same figure as without it — and −57.2 dB with both corners
+engaged at 200 Hz and 6 kHz; the a-type round trips null at −272.6 and −279.8 dB. The
+filters join the section count as something a pair must *agree* on — switch state and
+corner alike — rather than something that breaks the pair. `testSidechainHighPass` and `testSidechainLowPass` in `DspTests`
+cover the prototype magnitudes, the loop nulls with the corners engaged, and the
+detection-weighting behaviour of both engines.
+
+The pair fills the bottom row the drive knob's departure left short: **s/c hpf, s/c lpf,
+input, output**, four wide again, the half-pitch centring inset gone; the switch column
+grew a fourth line — captioned **s/c filters**, the HPF and LPF switches side by side —
+keeping every switch in the one column, now on four shared baselines, the last level with
+the knob row it switches. The second position
+was mix's, and **mix left the panel** to make the room — the parameter remains,
+host-visible and automatable, default 100%, the blend arithmetic and the bit-exact-dry
+zero unchanged. The precedent is Set Up's: a control whose real-two-instance setting is
+its default, kept off the panel deliberately with the capability intact, reachable from
+the parameter list by the sessions that want it.

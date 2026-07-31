@@ -210,6 +210,10 @@ private:
     std::atomic<float>* mixParam = nullptr;
     std::atomic<float>* polarityParam = nullptr;
     std::atomic<float>* autoGainParam = nullptr;
+    std::atomic<float>* scHpfParam = nullptr;
+    std::atomic<float>* scLpfParam = nullptr;
+    std::atomic<float>* scHpfOnParam = nullptr;
+    std::atomic<float>* scLpfOnParam = nullptr;
 
     lime::SrEngine engine;
     lime::AtypeEngine atype;

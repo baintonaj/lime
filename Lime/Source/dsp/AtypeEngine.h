@@ -164,6 +164,24 @@ public:
     void setPeakOperatingLevel (double amplitude) noexcept;
     double getPeakOperatingLevel() const noexcept { return peakLevel; }
 
+    /** The user's side-chain high pass: high-passes what the four compressors'
+        level detection reads, without touching the signal path or the band
+        filters. Each band's detector input is scaled by the third-order
+        Butterworth magnitude at the band's geometric centre — the per-band
+        equivalent of the per-bin weighting the spectral process applies. The
+        encoder and the decoder feed their detectors the same band signals, so an
+        identical corner on both leaves the round trip exact. Zero or negative
+        disables it, which is the default. Allocation free and a no-op unless the
+        corner moved. */
+    void setSidechainHighPass (double cornerHz) noexcept;
+    double getSidechainHighPass() const noexcept { return detectorHighPassHz; }
+
+    /** The matching low pass on the detection: the two corners multiply into one
+        weight per band, so together they band-limit what the compressors hear.
+        Same contract as setSidechainHighPass in every respect. */
+    void setSidechainLowPass (double cornerHz) noexcept;
+    double getSidechainLowPass() const noexcept { return detectorLowPassHz; }
+
     /** Processes in place. `channelData` must hold `numChannels` pointers to at
         least `numSamples` doubles. */
     void process (double* const* channelData, int numChannels, int numSamples);
@@ -212,11 +230,19 @@ private:
 
     void updateControl (BandState& s, double bandSample) const noexcept;
 
+    void rebuildDetectorWeights() noexcept;
+
     std::vector<std::unique_ptr<Channel>> channels;
 
     // Bands 1, 3 and 4; band 2 is derived.
     std::array<BiquadCoeffs, 3> bandCoeffs {};
     std::array<double, 4> gains { 0.0, 0.0, 0.0, 0.0 };
+
+    // The user's side-chain filters, combined into one per-band weight on the
+    // detector inputs.
+    std::array<double, 4> detectorWeight { 1.0, 1.0, 1.0, 1.0 };
+    double detectorHighPassHz = 0.0;
+    double detectorLowPassHz = 0.0;
 
     double currentSampleRate = 48000.0;
     double peakLevel = 1.0;

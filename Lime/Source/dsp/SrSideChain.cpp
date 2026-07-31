@@ -8,6 +8,8 @@
 
 #include "SrSideChain.h"
 
+#include "DspMath.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -47,6 +49,7 @@ void SrSideChain::prepare (bool highFrequency, int fftOrder, int hop, double sam
     bandWeight.assign ((size_t) numBins, 0.0);
     binHz.assign ((size_t) numBins, 0.0);
     binLogPosition.assign ((size_t) numBins, 0.0);
+    detectorWeight.assign ((size_t) numBins, 1.0);
 
     // Sized to the maximum rather than to the current count, so that changing the count
     // later never allocates and the setter stays safe to call from the audio thread.
@@ -102,6 +105,10 @@ void SrSideChain::prepare (bool highFrequency, int fftOrder, int hop, double sam
     // are sized: called earlier it wrote past the end of lowLevelBoostDb, which crashed on
     // the first prepare.
     rebuildBandWeights();
+
+    // A detector corner set before prepare — or surviving a sample-rate change —
+    // is honoured rather than lost, the same contract setSections keeps.
+    rebuildDetectorWeights();
 
     // Per-bin coefficient for a smoother whose width is constant in Bark rather than
     // in bins, so the envelope is smoothed by a critical band everywhere.
@@ -243,6 +250,46 @@ void SrSideChain::rebuildBandWeights()
 
     for (auto& stage : stages)
         stage.setBandWeight (bandWeight.data());
+}
+
+void SrSideChain::setDetectorHighPass (double cornerHz)
+{
+    // A static control costs nothing: the weights rebuild only when a corner moves.
+    if (cornerHz == detectorHighPassHz)
+        return;
+
+    detectorHighPassHz = cornerHz;
+    rebuildDetectorWeights();
+}
+
+void SrSideChain::setDetectorLowPass (double cornerHz)
+{
+    if (cornerHz == detectorLowPassHz)
+        return;
+
+    detectorLowPassHz = cornerHz;
+    rebuildDetectorWeights();
+}
+
+void SrSideChain::rebuildDetectorWeights()
+{
+    const auto numBins = (int) detectorWeight.size();
+
+    // The two magnitudes multiply, so their decibels add: together the corners
+    // band-limit the detection, and either alone is what it says it is.
+    for (int k = 0; k < numBins; ++k)
+    {
+        const double hz = binHz[(size_t) k];
+        double weight = 1.0;
+
+        if (detectorHighPassHz > 0.0)
+            weight *= butterworth3Magnitude (hz, detectorHighPassHz, true);
+
+        if (detectorLowPassHz > 0.0)
+            weight *= butterworth3Magnitude (hz, detectorLowPassHz, false);
+
+        detectorWeight[(size_t) k] = weight;
+    }
 }
 
 void SrSideChain::reset()
@@ -409,6 +456,17 @@ void SrSideChain::processFrame (std::complex<double>* bins, int numBins)
         {
             std::copy (pending.begin(), pending.begin() + numBins, running.begin());
         }
+
+        // The user's side-chain filters. The detection reads through them — outside
+        // the corners a bin looks quieter than it is, so the compressors treat it as
+        // low-level programme — while `pending` stays the raw encoded magnitude, so
+        // the shared encode/decode state is untouched and a corner change never
+        // desynchronises the two directions. Weighting `running` here also reaches
+        // the MC feed, which in the analog is itself taken from frequency-weighted
+        // main-path signals.
+        if (detectorHighPassHz > 0.0 || detectorLowPassHz > 0.0)
+            for (int k = 0; k < numBins; ++k)
+                running[(size_t) k] *= detectorWeight[(size_t) k];
 
         std::fill (total.begin(), total.begin() + numBins, 1.0);
 

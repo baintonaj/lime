@@ -27,6 +27,10 @@ namespace
     constexpr auto mixId = "mix";
     constexpr auto polarityId = "polarity";
     constexpr auto autoGainId = "autoGain";
+    constexpr auto scHpfId = "scHpf";
+    constexpr auto scLpfId = "scLpf";
+    constexpr auto scHpfOnId = "scHpfOn";
+    constexpr auto scLpfOnId = "scLpfOn";
 
     /** The band split's resolution, compiled in rather than exposed.
 
@@ -65,6 +69,28 @@ namespace
     juce::NormalisableRange<float> mixRange()
     {
         return { 0.0f, 200.0f, 0.01f };
+    }
+
+    /** The side-chain high pass sweeps the whole audio band with its skew centred
+        on the 80 Hz default — the corner a side-chain high pass classically rests
+        at, keeping bass out of the detectors — so the resting position points
+        straight up and every turn away from noon is a departure from stock. Far
+        from a log taper, but a default a user can read at a glance across a
+        session is worth more than symmetry. */
+    juce::NormalisableRange<float> scHpfRange()
+    {
+        juce::NormalisableRange<float> range { 20.0f, 20000.0f, 1.0f };
+        range.setSkewForCentre (80.0f);
+        return range;
+    }
+
+    /** The matching low pass, same span, its skew centred on its own 6 kHz
+        default for the same reason: noon is stock. */
+    juce::NormalisableRange<float> scLpfRange()
+    {
+        juce::NormalisableRange<float> range { 20.0f, 20000.0f, 1.0f };
+        range.setSkewForCentre (6000.0f);
+        return range;
     }
 
     /** Two decimals, because the interesting settings of a parallel blend are not the
@@ -107,6 +133,28 @@ namespace
             .withValueFromStringFunction ([] (const juce::String& text)
             {
                 return text.retainCharacters ("-+.0123456789").getFloatValue();
+            });
+    }
+
+    /** Frequencies read in the unit a musician says them: "6.00 kHz" above a
+        thousand, whole hertz below. Typed values accept "6000", "6k" and "6 kHz"
+        alike — the only 'k' a frequency box ever sees is a kilo prefix, so its
+        presence anywhere in the text means thousands; the range clamps afterwards. */
+    juce::AudioParameterFloatAttributes hzAttributes()
+    {
+        return juce::AudioParameterFloatAttributes()
+            .withLabel ("Hz")
+            .withStringFromValueFunction ([] (float value, int)
+            {
+                if (value >= 1000.0f)
+                    return juce::String (value / 1000.0f, 2) + " kHz";
+
+                return juce::String ((int) std::round (value)) + " Hz";
+            })
+            .withValueFromStringFunction ([] (const juce::String& text)
+            {
+                const auto number = text.retainCharacters ("-+.0123456789").getFloatValue();
+                return text.containsIgnoreCase ("k") ? number * 1000.0f : number;
             });
     }
 }
@@ -166,6 +214,33 @@ juce::AudioProcessorValueTreeState::ParameterLayout LimeAudioProcessor::createPa
     layout.add (std::make_unique<AudioParameterBool> (
         ParameterID { autoGainId, 1 }, "Auto Gain", false));
 
+    // The side-chain high pass. It filters what the compressors' level detection
+    // reads, never the audio: below the corner the programme reads quieter than
+    // it is, so the process treats it as low-level material, and the applied
+    // gain curve on the plot moves accordingly. Because encode and decode weight
+    // their detection identically, any setting leaves the round trip exact —
+    // agree on it across two instances, like the trims. 18 dB an octave,
+    // Butterworth, so the corner reads true.
+    layout.add (std::make_unique<AudioParameterFloat> (
+        ParameterID { scHpfId, 1 }, "Sidechain HPF", scHpfRange(), 80.0f, hzAttributes()));
+
+    // Its low-pass partner: the two corners band-limit what the detection hears.
+    layout.add (std::make_unique<AudioParameterFloat> (
+        ParameterID { scLpfId, 1 }, "Sidechain LPF", scLpfRange(), 6000.0f, hzAttributes()));
+
+    // Each filter has its own switch, and both rest off: a fresh instance detects
+    // with the full band, and the knobs' corners are positions held in readiness
+    // rather than filters already in circuit. Engaging one is deliberate — the
+    // switch, not the knob leaving its default, is what puts it in the path.
+    layout.add (std::make_unique<AudioParameterBool> (
+        ParameterID { scHpfOnId, 1 }, "Sidechain HPF On", false));
+    layout.add (std::make_unique<AudioParameterBool> (
+        ParameterID { scLpfOnId, 1 }, "Sidechain LPF On", false));
+
+    // Off the panel since the side-chain low pass took its knob, but still a full
+    // parameter — reachable from the host's list and automatable, the same
+    // arrangement Set Up has. The blend arithmetic, and the guarantee that zero
+    // is bit-exact dry, are unchanged.
     layout.add (std::make_unique<AudioParameterFloat> (
         ParameterID { mixId, 1 }, "Mix", mixRange(), 100.0f, mixAttributes()));
 
@@ -195,6 +270,10 @@ LimeAudioProcessor::LimeAudioProcessor()
     mixParam = parameters.getRawParameterValue (mixId);
     polarityParam = parameters.getRawParameterValue (polarityId);
     autoGainParam = parameters.getRawParameterValue (autoGainId);
+    scHpfParam = parameters.getRawParameterValue (scHpfId);
+    scLpfParam = parameters.getRawParameterValue (scLpfId);
+    scHpfOnParam = parameters.getRawParameterValue (scHpfOnId);
+    scLpfOnParam = parameters.getRawParameterValue (scLpfOnId);
 }
 
 LimeAudioProcessor::~LimeAudioProcessor() = default;
@@ -542,6 +621,20 @@ void LimeAudioProcessor::processChunk (juce::AudioBuffer<double>& buffer)
     // A change of process or mode is held back until the wet path has faded out; see
     // applyParameters.
     applyParameters (false);
+
+    // The side-chain filters, to both engines every chunk: a switched-off filter
+    // reads as no corner at all, which the engines take as unity weighting. Each
+    // setter is a no-op unless its value moved, and needs no smoothing of its
+    // own: it feeds level detection, whose own time constants — and the slew
+    // limit on the composite transfer — are what pace the resulting gain
+    // movement, switch throws included.
+    const double hpfCorner = *scHpfOnParam > 0.5f ? (double) scHpfParam->load() : 0.0;
+    const double lpfCorner = *scLpfOnParam > 0.5f ? (double) scLpfParam->load() : 0.0;
+
+    engine.setSidechainHighPass (hpfCorner);
+    engine.setSidechainLowPass (lpfCorner);
+    atype.setSidechainHighPass (hpfCorner);
+    atype.setSidechainLowPass (lpfCorner);
 
     bypassAmount.setTarget (isBypassed() ? 0.0 : 1.0);
     transition.setTarget (configurationChanging ? 0.0 : 1.0);

@@ -8,18 +8,17 @@
     grid — but in lime rather than periwinkle, since that is the plugin's name.
 
     Where Lime differs from Apti-Q it is because the process differs. Apti-Q is sixteen
-    knobs; Lime is seven — four over three, the three centred, so the knob block reads
-    as an inverted trapezoid — and the freed space goes to the plot of the applied gain
-    curve over the input spectrum, which is the most informative thing the plugin can
-    show: boost rides above the zero line wherever the signal is quiet, cut mirrors it
-    below in down mode.
+    knobs; Lime is eight — two aligned rows of four, each filling the grid — and the
+    freed space goes to the plot of the applied gain curve over the input spectrum,
+    which is the most informative thing the plugin can show: boost rides above the zero
+    line wherever the signal is quiet, cut mirrors it below in down mode.
 
     The top row is the four pass trims, named in the modes' own vocabulary — the in-trims
     set how hard the programme drives each pass, which is this architecture's threshold
     control, and the out-trims are each pass's level compensation. The bottom row is the
-    plugin's own, in the order the signal meets it: input, the blend against dry, output.
-    Every switch lives in one column to the right of both rows, so the eye finds them in
-    one place rather than three.
+    plugin's own: the side-chain high and low passes, then the input and output
+    gains. Every switch lives in one column to the right of both rows, so the eye finds
+    them in one place rather than three.
 
     The selectors are rows of toggles rather than combo boxes, because Off/A/B is a
     three-position switch on the hardware this follows, not a menu, and because that is
@@ -104,16 +103,24 @@ private:
     SpectrumDisplay display;
     MeterBar meter;
 
-    // Four over three, the three centred — an inverted trapezoid. The top row is the
-    // pass trims; the bottom is the plugin's own: the masters that exist because a
-    // plugin, unlike a module in a console, does not sit at a known level.
+    // Two aligned rows of four. The top row is the pass trims; the bottom is the
+    // plugin's own — the side-chain high and low passes, then the masters that
+    // exist because a plugin, unlike a module in a console, does not sit at a known
+    // level. Declared in panel order, which is not signal order.
     Trim recIn, recOut, playIn, playOut;
-    Trim inputGain, mix, outputGain;
+    Trim scHpf, scLpf, inputGain, outputGain;
     Selector processSelector, modeSelector;
 
     juce::TextButton polarityButton, bypassButton, autoGainButton;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
         polarityAttachment, bypassAttachment, autoGainAttachment;
+
+    // The side-chain filters' switches, in their own captioned row of the switch
+    // column: the knobs hold the corners, these put them in the path.
+    juce::TextButton scHpfButton, scLpfButton;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+        scHpfOnAttachment, scLpfOnAttachment;
+    juce::Label scFilterCaption;
 
     // The panel carries no explanatory text: no running description of what the process is
     // doing, and no tooltips. Both were tried. The description took a whole row and changed

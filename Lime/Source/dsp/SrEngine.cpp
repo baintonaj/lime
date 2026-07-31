@@ -181,8 +181,11 @@ void SrEngine::prepare (double sampleRate, int maxBlockSize, int numChannels)
     // The halves come out of prepare at the default resolution, so a section count set
     // before prepareToPlay is not lost. Same for the probes: a sample-rate change rebuilds
     // every side chain, and an editor that is already open is not going to ask twice.
+    // The side-chain filters ride along for the same reason.
     setSections (sections.load (std::memory_order_relaxed));
     setProbesActive (probesActive.load (std::memory_order_relaxed));
+    setSidechainHighPass (sidechainHighPassHz);
+    setSidechainLowPass (sidechainLowPassHz);
 
     // Unity, and snapped rather than faded: prepare is not a control movement.
     sendOutTrim.prepare (sampleRate, defaultSettlingSeconds, 1.0);
@@ -264,6 +267,35 @@ void SrEngine::setEnvelopeSmoothing (double bark)
         c->lfEncode.setEnvelopeSmoothingBark (bark);
         c->hfDecode.setEnvelopeSmoothingBark (bark);
         c->lfDecode.setEnvelopeSmoothingBark (bark);
+    }
+}
+
+void SrEngine::setSidechainHighPass (double cornerHz)
+{
+    sidechainHighPassHz = cornerHz;
+
+    // The same corner to all four — an encode and a decode that disagreed on what
+    // the detection reads would compute different gains, and the exactness of the
+    // round trip rests on them never doing that.
+    for (auto& c : channels)
+    {
+        c->hfEncode.setDetectorHighPass (cornerHz);
+        c->lfEncode.setDetectorHighPass (cornerHz);
+        c->hfDecode.setDetectorHighPass (cornerHz);
+        c->lfDecode.setDetectorHighPass (cornerHz);
+    }
+}
+
+void SrEngine::setSidechainLowPass (double cornerHz)
+{
+    sidechainLowPassHz = cornerHz;
+
+    for (auto& c : channels)
+    {
+        c->hfEncode.setDetectorLowPass (cornerHz);
+        c->lfEncode.setDetectorLowPass (cornerHz);
+        c->hfDecode.setDetectorLowPass (cornerHz);
+        c->lfDecode.setDetectorLowPass (cornerHz);
     }
 }
 

@@ -12,11 +12,13 @@
   ==============================================================================
 */
 
+#include "../dsp/AtypeEngine.h"
 #include "../dsp/AutoGain.h"
 #include "../dsp/Biquad64.h"
 #include "../dsp/ControlSmoother.h"
 #include "../dsp/Crossfade.h"
 #include "../dsp/DelayLine64.h"
+#include "../dsp/DspMath.h"
 #include "../dsp/Fft64.h"
 #include "../dsp/FilterDesign.h"
 #include "../dsp/FixedBand.h"
@@ -28,6 +30,7 @@
 #include "../dsp/SlidingLayer.h"
 #include "../dsp/SpectrumProbe.h"
 #include "../dsp/SrEngine.h"
+#include "../dsp/WetLowPass.h"
 #include "../dsp/Window.h"
 #include "../dsp/Wola64.h"
 
@@ -3302,6 +3305,505 @@ void testMeasuredOnPathLatency()
     expectEqual ("loop mode, spectral recording, best-fit delay", fitted, latency);
 }
 
+//==============================================================================
+/** The wet-only low pass ahead of the blend.
+
+    A Butterworth magnitude through the bilinear transform has a closed form —
+    |H|^2 = 1 / (1 + r^6) with r the ratio of prewarped frequencies — so the
+    digital design is held to the analog prototype exactly across the band, not
+    just spot-checked at the corner.
+*/
+void testWetLowPass()
+{
+    std::printf ("\nWet low pass matches the third-order Butterworth prototype\n");
+
+    const auto magnitudeDb = [] (const std::array<BiquadCoeffs, 2>& c, double hz, double rate)
+    {
+        const double omega = twoPi * hz / rate;
+        return 20.0 * std::log10 (std::abs (c[0].responseAt (omega) * c[1].responseAt (omega)));
+    };
+
+    // The whole curve against the prototype, at the corners the knob rests on.
+    for (double rate : { 44100.0, 48000.0, 96000.0 })
+        for (double cornerHz : { 1000.0, 6000.0 })
+        {
+            const auto coeffs = butterworthLowPass18 (cornerHz, rate);
+            const double kCorner = std::tan (3.14159265358979323846 * cornerHz / rate);
+            double worst = 0.0;
+
+            for (double hz = 20.0; hz < 0.49 * rate; hz *= 1.1)
+            {
+                const double r = std::tan (3.14159265358979323846 * hz / rate) / kCorner;
+                const double wantDb = -10.0 * std::log10 (1.0 + std::pow (r, 6.0));
+
+                worst = std::max (worst, std::abs (magnitudeDb (coeffs, hz, rate) - wantDb));
+            }
+
+            expectNear ("prototype match, " + std::to_string ((int) cornerHz) + " Hz at "
+                            + std::to_string ((int) rate) + " Hz",
+                        worst, 0.0, 1.0e-9);
+        }
+
+    // The knob's number is the -3 dB point, exactly, and DC passes untouched.
+    for (double rate : { 48000.0, 96000.0 })
+        expectNear ("corner is -3.01 dB at " + std::to_string ((int) rate) + " Hz",
+                    magnitudeDb (butterworthLowPass18 (6000.0, rate), 6000.0, rate),
+                    -3.0102999566398, 1.0e-3);
+
+    for (double cornerHz : { 100.0, 6000.0, 20000.0 })
+        expectNear ("DC unity, corner " + std::to_string ((int) cornerHz) + " Hz",
+                    magnitudeDb (butterworthLowPass18 (cornerHz, 48000.0), 0.0, 48000.0),
+                    0.0, 1.0e-10);
+
+    // Third order means an octave above the corner sits at -10 log10 (1 + 2^6).
+    // Measured on a low corner, where the bilinear warp is negligible.
+    expectNear ("one octave above a 1 kHz corner",
+                magnitudeDb (butterworthLowPass18 (1000.0, 48000.0), 2000.0, 48000.0),
+                -18.129, 0.3);
+
+    // Fully open at the lowest rate: poles close to Nyquist, still quiet and stable.
+    {
+        WetLowPass filter;
+        filter.prepare (44100.0, defaultSettlingSeconds, 1, 20000.0);
+
+        std::vector<double> impulse (8192, 0.0);
+        impulse[0] = 1.0;
+        double* pointers[1] = { impulse.data() };
+        filter.process (pointers, 1, (int) impulse.size());
+
+        long long finite = 0;
+
+        for (auto x : impulse)
+            if (std::isfinite (x))
+                ++finite;
+
+        double tail = 0.0;
+
+        for (size_t n = 4096; n < impulse.size(); ++n)
+            tail = std::max (tail, std::abs (impulse[n]));
+
+        expectEqual ("20 kHz corner at 44.1 kHz, every sample finite",
+                     finite, (long long) impulse.size());
+        expectBelow ("20 kHz corner at 44.1 kHz, ring 4096 samples in",
+                     relativeDb (tail, 1.0), -100.0);
+    }
+
+    // A full-range sweep under full-scale programme: the corner walks from 6 kHz
+    // to 100 Hz while a 1 kHz sine plays. DF-I under moving coefficients has to
+    // stay bounded, and the redesigns must not allocate.
+    {
+        WetLowPass filter;
+        filter.prepare (48000.0, defaultSettlingSeconds, 2, 6000.0);
+        filter.setCornerHz (100.0);
+
+        constexpr int block = 512;
+        std::vector<double> left (block), right (block);
+        double* pointers[2] = { left.data(), right.data() };
+
+        double peak = 0.0;
+        long long badSamples = 0;
+        int sampleIndex = 0;
+
+        allocationCount.store (0);
+        countingAllocations.store (true);
+
+        for (int b = 0; b < 40; ++b)
+        {
+            for (int n = 0; n < block; ++n, ++sampleIndex)
+                left[(size_t) n] = right[(size_t) n]
+                    = std::sin (twoPi * 1000.0 * sampleIndex / 48000.0);
+
+            filter.process (pointers, 2, block);
+
+            for (int n = 0; n < block; ++n)
+            {
+                if (! std::isfinite (left[(size_t) n]))
+                    ++badSamples;
+
+                peak = std::max (peak, std::abs (left[(size_t) n]));
+            }
+        }
+
+        countingAllocations.store (false);
+
+        expectEqual ("swept corner, no non-finite samples", badSamples, 0);
+        expectEqual ("swept redesigns never allocate", allocationCount.load(), 0);
+        expectBelow ("peak through the sweep", relativeDb (peak, 1.0), 2.0);
+        expectNear ("the corner arrived", filter.getCornerHz(), 100.0, 0.5, "Hz");
+    }
+
+    // reset() clears history and nothing else: the response afterwards is the
+    // response of a fresh instance, sample for sample.
+    {
+        WetLowPass used, fresh;
+        used.prepare (48000.0, defaultSettlingSeconds, 1, 2000.0);
+        fresh.prepare (48000.0, defaultSettlingSeconds, 1, 2000.0);
+
+        auto noise = makeNoise (1024, 4242u);
+        double* noisePtr[1] = { noise.data() };
+        used.process (noisePtr, 1, (int) noise.size());
+        used.reset();
+
+        std::vector<double> a (2048, 0.0), b (2048, 0.0);
+        a[0] = b[0] = 1.0;
+        double* aPtr[1] = { a.data() };
+        double* bPtr[1] = { b.data() };
+        used.process (aPtr, 1, (int) a.size());
+        fresh.process (bPtr, 1, (int) b.size());
+
+        double difference = 0.0;
+
+        for (size_t n = 0; n < a.size(); ++n)
+            difference = std::max (difference, std::abs (a[n] - b[n]));
+
+        expectNear ("reset matches a fresh instance", difference, 0.0, 0.0, "");
+    }
+}
+
+//==============================================================================
+/** The side-chain high pass: the compressors' level detection reads through it,
+    the signal path does not. Both engines weight encode and decode identically,
+    so the round trip must stay exact at any corner — that is the property that
+    distinguishes this placement from a filter in the audio path. */
+void testSidechainHighPass()
+{
+    std::printf ("\nSide-chain high pass weights detection, not audio\n");
+
+    // The weight is the analog prototype's magnitude exactly: -3.01 dB on the
+    // corner, 18 dB an octave beyond it, silent at DC, unity far into the band.
+    expectNear ("high-pass corner is -3.01 dB",
+                20.0 * std::log10 (butterworth3Magnitude (6000.0, 6000.0, true)),
+                -3.0103, 1.0e-3);
+    expectNear ("low-pass corner is -3.01 dB",
+                20.0 * std::log10 (butterworth3Magnitude (6000.0, 6000.0, false)),
+                -3.0103, 1.0e-3);
+    expectNear ("an octave below the corner",
+                20.0 * std::log10 (butterworth3Magnitude (3000.0, 6000.0, true)),
+                -18.129, 1.0e-2);
+    expectNear ("far above the corner it is unity",
+                20.0 * std::log10 (butterworth3Magnitude (20000.0, 100.0, true)),
+                0.0, 1.0e-3);
+    expectNear ("DC reads silent", butterworth3Magnitude (0.0, 6000.0, true),
+                0.0, 0.0, "");
+
+    // Loop-mode null with the corner engaged: encode and decode weight their
+    // detection identically, so the complementarity is what it was without it —
+    // the same limit testEncodeDecodeNull records for the unweighted engine.
+    {
+        TapeChannelSettings transparent;
+        transparent.hissEnabled = false;
+        transparent.saturationEnabled = false;
+        transparent.hfLossEnabled = false;
+        transparent.modulationNoiseEnabled = false;
+
+        SrEngine engine;
+        engine.prepare (48000.0, 1024, 1);
+        engine.setProcess (SrProcess::spectralRecording);
+        engine.setMode (SrMode::loop);
+        engine.setSidechainHighPass (6000.0);
+        engine.getTapeChannel().setSettings (transparent);
+
+        const int latency = engine.getLatencySamples();
+        const int total = 6 * latency;
+
+        auto input = makeNoise (total, 60606u);
+
+        for (auto& v : input)
+            v *= 0.05;
+
+        std::vector<double> output = input;
+        runEngine (engine, output);
+
+        const double err = delayedError (output, input, latency, latency);
+
+        expectBelow ("loop-mode null with the corner at 6 kHz",
+                     relativeDb (err, peakMagnitude (input)), -26.0);
+    }
+
+    // Below the corner the detection under-reads, so a moderate low tone is
+    // treated as low-level programme and boosted harder on encode.
+    {
+        const auto encodeLevelDb = [] (double cornerHz)
+        {
+            SrEngine engine;
+            engine.prepare (48000.0, 1024, 1);
+            engine.setProcess (SrProcess::spectralRecording);
+            engine.setMode (SrMode::encode);
+            engine.setSidechainHighPass (cornerHz);
+
+            const int latency = engine.getLatencySamples();
+            const int total = 6 * latency;
+
+            std::vector<double> buffer ((size_t) total);
+
+            for (int n = 0; n < total; ++n)
+                buffer[(size_t) n] = 0.1 * std::sin (twoPi * 200.0 * (double) n / 48000.0);
+
+            runEngine (engine, buffer);
+
+            double sum = 0.0;
+
+            for (int n = total / 2; n < total; ++n)
+                sum += buffer[(size_t) n] * buffer[(size_t) n];
+
+            return 10.0 * std::log10 (sum / (double) (total - total / 2));
+        };
+
+        const double extraDb = encodeLevelDb (12000.0) - encodeLevelDb (0.0);
+
+        ++checks;
+        const bool boosted = extraDb > 3.0;
+
+        if (! boosted)
+            ++failures;
+
+        std::printf ("  [%s] %-58s %8.1f dB  (wants above %.1f dB)\n",
+                     boosted ? "pass" : "FAIL",
+                     "a 200 Hz tone at -20 dB gains more, corner at 12 kHz", extraDb, 3.0);
+    }
+
+    // A-type: the corner set identically on an encoder and a decoder leaves the
+    // round trip exact — the decoder's solver recovers the encoder's input from
+    // the same detector states, weighted or not.
+    {
+        const auto runAtype = [] (AtypeEngine& e, std::vector<double>& buffer)
+        {
+            constexpr int block = 512;
+
+            for (int at = 0; at < (int) buffer.size(); at += block)
+            {
+                double* ptr = buffer.data() + at;
+                const int len = std::min (block, (int) buffer.size() - at);
+                e.process (&ptr, 1, len);
+            }
+        };
+
+        AtypeEngine encoder, decoder;
+        encoder.prepare (48000.0, 512, 1);
+        decoder.prepare (48000.0, 512, 1);
+        encoder.setMode (AtypeMode::encode);
+        decoder.setMode (AtypeMode::decode);
+        encoder.setSidechainHighPass (6000.0);
+        decoder.setSidechainHighPass (6000.0);
+
+        auto input = makeNoise (48000, 31313u);
+
+        for (auto& v : input)
+            v *= 0.05;
+
+        std::vector<double> processed = input;
+        runAtype (encoder, processed);
+        runAtype (decoder, processed);
+
+        double err = 0.0;
+
+        for (size_t n = 0; n < input.size(); ++n)
+            err = std::max (err, std::abs (processed[n] - input[n]));
+
+        expectBelow ("a-type round trip with the corner at 6 kHz",
+                     relativeDb (err, peakMagnitude (input)), -100.0);
+
+        // And the weighting is real: a 12 kHz tone whose band detector under-reads
+        // comes out of the encoder hotter than with the weighting off.
+        const auto atypeLevelDb = [&runAtype] (double cornerHz)
+        {
+            AtypeEngine e;
+            e.prepare (48000.0, 512, 1);
+            e.setMode (AtypeMode::encode);
+            e.setSidechainHighPass (cornerHz);
+
+            std::vector<double> buffer (48000);
+
+            for (int n = 0; n < (int) buffer.size(); ++n)
+                buffer[(size_t) n] = 0.05 * std::sin (twoPi * 12000.0 * (double) n / 48000.0);
+
+            runAtype (e, buffer);
+
+            double sum = 0.0;
+            const int half = (int) buffer.size() / 2;
+
+            for (int n = half; n < (int) buffer.size(); ++n)
+                sum += buffer[(size_t) n] * buffer[(size_t) n];
+
+            return 10.0 * std::log10 (sum / (double) half);
+        };
+
+        const double extraDb = atypeLevelDb (18000.0) - atypeLevelDb (0.0);
+
+        ++checks;
+        const bool boosted = extraDb > 1.0;
+
+        if (! boosted)
+            ++failures;
+
+        std::printf ("  [%s] %-58s %8.1f dB  (wants above %.1f dB)\n",
+                     boosted ? "pass" : "FAIL",
+                     "a-type: a 12 kHz tone gains more, corner at 18 kHz", extraDb, 1.0);
+    }
+}
+
+//==============================================================================
+/** The matching side-chain low pass, and the two corners together. Same
+    contract as the high pass: detection only, and the round trip stays exact
+    with both engaged. */
+void testSidechainLowPass()
+{
+    std::printf ("\nSide-chain low pass, and both corners together\n");
+
+    // Loop-mode null with the detection band-limited from both ends.
+    {
+        TapeChannelSettings transparent;
+        transparent.hissEnabled = false;
+        transparent.saturationEnabled = false;
+        transparent.hfLossEnabled = false;
+        transparent.modulationNoiseEnabled = false;
+
+        SrEngine engine;
+        engine.prepare (48000.0, 1024, 1);
+        engine.setProcess (SrProcess::spectralRecording);
+        engine.setMode (SrMode::loop);
+        engine.setSidechainHighPass (200.0);
+        engine.setSidechainLowPass (6000.0);
+        engine.getTapeChannel().setSettings (transparent);
+
+        const int latency = engine.getLatencySamples();
+        const int total = 6 * latency;
+
+        auto input = makeNoise (total, 91919u);
+
+        for (auto& v : input)
+            v *= 0.05;
+
+        std::vector<double> output = input;
+        runEngine (engine, output);
+
+        const double err = delayedError (output, input, latency, latency);
+
+        expectBelow ("loop-mode null, detection band-limited 200 Hz - 6 kHz",
+                     relativeDb (err, peakMagnitude (input)), -26.0);
+    }
+
+    // Above the corner the detection under-reads, so a moderate high tone is
+    // treated as low-level programme and boosted harder on encode.
+    {
+        const auto encodeLevelDb = [] (double cornerHz)
+        {
+            SrEngine engine;
+            engine.prepare (48000.0, 1024, 1);
+            engine.setProcess (SrProcess::spectralRecording);
+            engine.setMode (SrMode::encode);
+            engine.setSidechainLowPass (cornerHz);
+
+            const int latency = engine.getLatencySamples();
+            const int total = 6 * latency;
+
+            std::vector<double> buffer ((size_t) total);
+
+            for (int n = 0; n < total; ++n)
+                buffer[(size_t) n] = 0.1 * std::sin (twoPi * 10000.0 * (double) n / 48000.0);
+
+            runEngine (engine, buffer);
+
+            double sum = 0.0;
+
+            for (int n = total / 2; n < total; ++n)
+                sum += buffer[(size_t) n] * buffer[(size_t) n];
+
+            return 10.0 * std::log10 (sum / (double) (total - total / 2));
+        };
+
+        const double extraDb = encodeLevelDb (1000.0) - encodeLevelDb (0.0);
+
+        ++checks;
+        const bool boosted = extraDb > 3.0;
+
+        if (! boosted)
+            ++failures;
+
+        std::printf ("  [%s] %-58s %8.1f dB  (wants above %.1f dB)\n",
+                     boosted ? "pass" : "FAIL",
+                     "a 10 kHz tone at -20 dB gains more, corner at 1 kHz", extraDb, 3.0);
+    }
+
+    // A-type: both corners set identically on an encoder and a decoder leave the
+    // round trip exact, and the low pass moves the high bands' detectors.
+    {
+        const auto runAtype = [] (AtypeEngine& e, std::vector<double>& buffer)
+        {
+            constexpr int block = 512;
+
+            for (int at = 0; at < (int) buffer.size(); at += block)
+            {
+                double* ptr = buffer.data() + at;
+                const int len = std::min (block, (int) buffer.size() - at);
+                e.process (&ptr, 1, len);
+            }
+        };
+
+        AtypeEngine encoder, decoder;
+        encoder.prepare (48000.0, 512, 1);
+        decoder.prepare (48000.0, 512, 1);
+        encoder.setMode (AtypeMode::encode);
+        decoder.setMode (AtypeMode::decode);
+        encoder.setSidechainHighPass (200.0);
+        encoder.setSidechainLowPass (6000.0);
+        decoder.setSidechainHighPass (200.0);
+        decoder.setSidechainLowPass (6000.0);
+
+        auto input = makeNoise (48000, 41414u);
+
+        for (auto& v : input)
+            v *= 0.05;
+
+        std::vector<double> processed = input;
+        runAtype (encoder, processed);
+        runAtype (decoder, processed);
+
+        double err = 0.0;
+
+        for (size_t n = 0; n < input.size(); ++n)
+            err = std::max (err, std::abs (processed[n] - input[n]));
+
+        expectBelow ("a-type round trip, detection band-limited 200 Hz - 6 kHz",
+                     relativeDb (err, peakMagnitude (input)), -100.0);
+
+        const auto atypeLevelDb = [&runAtype] (double cornerHz)
+        {
+            AtypeEngine e;
+            e.prepare (48000.0, 512, 1);
+            e.setMode (AtypeMode::encode);
+            e.setSidechainLowPass (cornerHz);
+
+            std::vector<double> buffer (48000);
+
+            for (int n = 0; n < (int) buffer.size(); ++n)
+                buffer[(size_t) n] = 0.05 * std::sin (twoPi * 12000.0 * (double) n / 48000.0);
+
+            runAtype (e, buffer);
+
+            double sum = 0.0;
+            const int half = (int) buffer.size() / 2;
+
+            for (int n = half; n < (int) buffer.size(); ++n)
+                sum += buffer[(size_t) n] * buffer[(size_t) n];
+
+            return 10.0 * std::log10 (sum / (double) half);
+        };
+
+        const double extraDb = atypeLevelDb (1000.0) - atypeLevelDb (0.0);
+
+        ++checks;
+        const bool boosted = extraDb > 1.0;
+
+        if (! boosted)
+            ++failures;
+
+        std::printf ("  [%s] %-58s %8.1f dB  (wants above %.1f dB)\n",
+                     boosted ? "pass" : "FAIL",
+                     "a-type: a 12 kHz tone gains more, corner at 1 kHz", extraDb, 1.0);
+    }
+}
+
 } // namespace
 
 //==============================================================================
@@ -3342,6 +3844,9 @@ int main()
     testEngineProcessDoesNotAllocate();
     testSlidingLayerModulationControlRelease();
     testMeasuredOnPathLatency();
+    testWetLowPass();
+    testSidechainHighPass();
+    testSidechainLowPass();
 
     std::printf ("\n%d checks, %d failure%s\n", checks, failures, failures == 1 ? "" : "s");
 

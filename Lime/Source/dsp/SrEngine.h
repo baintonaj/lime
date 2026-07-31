@@ -168,6 +168,19 @@ public:
         can see a torn value. */
     int getSections() const noexcept { return sections.load (std::memory_order_relaxed); }
 
+    /** The user's side-chain high pass: high-passes what every compressor's level
+        detection reads, without touching the signal path. Pushed to all four side
+        chains at once for the same reason setSections is — quoting the two
+        directions different corners is exactly what would break the
+        complementarity. Zero or negative disables it. See
+        SrSideChain::setDetectorHighPass. */
+    void setSidechainHighPass (double cornerHz);
+
+    /** The matching low pass on the detection; the two corners band-limit what
+        the compressors hear. Same fan-out and same discipline. See
+        SrSideChain::setDetectorLowPass. */
+    void setSidechainLowPass (double cornerHz);
+
     /** The three calibration trims that sit *inside* the loop, as linear gains.
 
         In loop mode the channel is inside the instance, so send out, return in and return
@@ -248,6 +261,8 @@ private:
     std::atomic<int> lastDominants { 0 };
     double smoothing = 0.0;
     double envelopeBark = 1.0;
+    double sidechainHighPassHz = 0.0;
+    double sidechainLowPassHz = 0.0;
     GainRealisation realisation = GainRealisation::stft;
     bool prepared = false;
 
