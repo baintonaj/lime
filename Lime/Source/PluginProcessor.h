@@ -218,8 +218,6 @@ private:
     std::atomic<float>* upReleaseParam = nullptr;
     std::atomic<float>* downAttackParam = nullptr;
     std::atomic<float>* downReleaseParam = nullptr;
-    std::atomic<float>* upTimeOnParam = nullptr;
-    std::atomic<float>* downTimeOnParam = nullptr;
 
     lime::SrEngine engine;
     lime::AtypeEngine atype;

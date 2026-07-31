@@ -200,6 +200,15 @@ public:
     const double* getControl() const noexcept { return control.data(); }
 
 private:
+    /** The frame loop, parameterised on the knee shape. The knee exponent is
+        2.0 in every constructed stage, but inside one shared loop the
+        auto-vectoriser speculates shapeRatio's general std::pow branch — one
+        discarded libm call per bin per frame, the engine's largest avoidable
+        cost. Choosing the shape once per frame keeps the squared knee's loop
+        free of pow entirely; the arithmetic is identical bit for bit. */
+    template <typename Shape>
+    void processFrameShaped (const double* magnitudes, double* transferOut, Shape shape);
+
     FixedBandParams params;
 
     int numBins = 0;

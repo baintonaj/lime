@@ -35,8 +35,6 @@ namespace
     constexpr auto upReleaseId = "upRelease";
     constexpr auto downAttackId = "downAttack";
     constexpr auto downReleaseId = "downRelease";
-    constexpr auto upTimeOnId = "upTimeOn";
-    constexpr auto downTimeOnId = "downTimeOn";
 
     /** The band split's resolution, compiled in rather than exposed.
 
@@ -99,21 +97,25 @@ namespace
         return range;
     }
 
-    /** An attack sweeps a decade either side of the sliding band's published 5 ms
-        first pole, skew centred on the 5 ms default so noon is stock — the
-        side-chain corner precedent. */
+    /** An attack runs 1 to 100 ms — the span settled by ear. The published
+        fast trackers ahead of the governed smoother respond at 5 to 15 ms
+        regardless, so the low end approaches them rather than diving a decade
+        under; the floor also coincides with the a-type's 1 ms fast-attack
+        cap, so no knob position asks for what the process cannot run. Skew
+        centred on the 5 ms default: noon is stock. */
     juce::NormalisableRange<float> attackRange()
     {
-        juce::NormalisableRange<float> range { 0.1f, 1000.0f, 0.01f };
+        juce::NormalisableRange<float> range { 1.0f, 100.0f, 0.01f };
         range.setSkewForCentre (5.0f);
         return range;
     }
 
-    /** A release spans 10 ms to 5 s around its 100 ms default — the neighbourhood
-        of the published 80/150 ms finals — for the same reason: noon is stock. */
+    /** A release spans 10 ms to 2.5 s around its 100 ms default — the
+        neighbourhood of the published 80/150 ms finals — with the same rule:
+        noon is stock. */
     juce::NormalisableRange<float> releaseRange()
     {
-        juce::NormalisableRange<float> range { 10.0f, 5000.0f, 0.1f };
+        juce::NormalisableRange<float> range { 10.0f, 2500.0f, 0.1f };
         range.setSkewForCentre (100.0f);
         return range;
     }
@@ -289,14 +291,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout LimeAudioProcessor::createPa
     layout.add (std::make_unique<AudioParameterBool> (
         ParameterID { scLpfOnId, 1 }, "Sidechain LPF On", false));
 
-    // The per-half time constants. Each pair overrides the dominant final
-    // smoothers of its own direction's detection — attack while the detected
-    // level rises, release while it falls — leaving the fast published trackers
-    // in place. The halves are deliberately independent, and the trade is
-    // stated plainly: the round trip is exact only while up and down run the
-    // same ballistics, so matching the pairs (or leaving both switches off) is
-    // what preserves the null, and splitting them is a creative choice that
-    // forfeits it.
+    // The per-half time constants, always in circuit: each pair overrides the
+    // dominant final smoothers of its own direction's detection — attack while
+    // the detected level rises, release while it falls — leaving the fast
+    // published trackers in place. The defaults are therefore the stock
+    // ballistics of a fresh instance. The halves are deliberately independent,
+    // and the trade is stated plainly: the round trip is exact only while up
+    // and down run the same times, so matching the pairs is what preserves
+    // the null, and splitting them is a creative choice that forfeits it.
     layout.add (std::make_unique<AudioParameterFloat> (
         ParameterID { upAttackId, 1 }, "Up Attack", attackRange(), 5.0f, msAttributes()));
     layout.add (std::make_unique<AudioParameterFloat> (
@@ -305,14 +307,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout LimeAudioProcessor::createPa
         ParameterID { downAttackId, 1 }, "Down Attack", attackRange(), 5.0f, msAttributes()));
     layout.add (std::make_unique<AudioParameterFloat> (
         ParameterID { downReleaseId, 1 }, "Down Release", releaseRange(), 100.0f, msAttributes()));
-
-    // One switch per half, both resting off: a fresh instance runs the published
-    // ballistics, and the knobs hold times in readiness — the side-chain
-    // filters' arrangement, kept.
-    layout.add (std::make_unique<AudioParameterBool> (
-        ParameterID { upTimeOnId, 1 }, "Up Times On", false));
-    layout.add (std::make_unique<AudioParameterBool> (
-        ParameterID { downTimeOnId, 1 }, "Down Times On", false));
 
     // Off the panel since the side-chain low pass took its knob, but still a full
     // parameter — reachable from the host's list and automatable, the same
@@ -355,8 +349,6 @@ LimeAudioProcessor::LimeAudioProcessor()
     upReleaseParam = parameters.getRawParameterValue (upReleaseId);
     downAttackParam = parameters.getRawParameterValue (downAttackId);
     downReleaseParam = parameters.getRawParameterValue (downReleaseId);
-    upTimeOnParam = parameters.getRawParameterValue (upTimeOnId);
-    downTimeOnParam = parameters.getRawParameterValue (downTimeOnId);
 }
 
 LimeAudioProcessor::~LimeAudioProcessor() = default;
@@ -719,13 +711,15 @@ void LimeAudioProcessor::processChunk (juce::AudioBuffer<double>& buffer)
     atype.setSidechainHighPass (hpfCorner);
     atype.setSidechainLowPass (lpfCorner);
 
-    // The per-half time constants, by the same arrangement: a switched-off half
-    // reads as no times at all, which the engines take as the published
-    // ballistics, and each setter is a no-op unless a value moved.
-    const double upAttack = *upTimeOnParam > 0.5f ? (double) upAttackParam->load() : 0.0;
-    const double upRelease = *upTimeOnParam > 0.5f ? (double) upReleaseParam->load() : 0.0;
-    const double downAttack = *downTimeOnParam > 0.5f ? (double) downAttackParam->load() : 0.0;
-    const double downRelease = *downTimeOnParam > 0.5f ? (double) downReleaseParam->load() : 0.0;
+    // The per-half time constants, by the same arrangement — always in
+    // circuit, the knobs' values are the ballistics. (The engines' zero
+    // sentinel, meaning the published constants, remains a library capability
+    // the wrapper no longer reaches for.) Each setter is a no-op unless a
+    // value moved, and both engines read the same four loads.
+    const double upAttack = (double) upAttackParam->load();
+    const double upRelease = (double) upReleaseParam->load();
+    const double downAttack = (double) downAttackParam->load();
+    const double downRelease = (double) downReleaseParam->load();
 
     engine.setTimeConstants (upAttack, upRelease, downAttack, downRelease);
     atype.setTimeConstants (upAttack, upRelease, downAttack, downRelease);
@@ -853,7 +847,9 @@ void LimeAudioProcessor::processChunk (juce::AudioBuffer<double>& buffer)
 
     // Loudness-matching makeup, measured against the delayed dry copy and applied
     // to the wet path before the blend — so bypass, mix and the process switches
-    // compare character at matched loudness rather than louder-wins.
+    // compare character at matched loudness rather than louder-wins. The
+    // measurement deliberately runs while the switch is off: engaging then finds
+    // a warm 3-second estimate instead of ramping in from a cold one.
     autoGain.setEnabled (*autoGainParam > 0.5f);
     autoGain.measure (dryBuffer.getArrayOfReadPointers(),
                       buffer.getArrayOfReadPointers(), numToProcess, numSamples);

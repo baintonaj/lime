@@ -49,8 +49,12 @@ LimeAudioProcessorEditor::LimeAudioProcessorEditor (LimeAudioProcessor& p)
 {
     setLookAndFeel (&lookAndFeel);
 
-    addAndMakeVisible (meter);
-    addAndMakeVisible (display);
+    // The scaled child that carries the whole panel; see the header note. It
+    // has to exist before anything is parented into it.
+    addAndMakeVisible (content);
+
+    content.addAndMakeVisible (meter);
+    content.addAndMakeVisible (display);
 
     // The engine only publishes curve snapshots while something is looking at them; see
     // SrEngine::setProbesActive. Switched off again in the destructor.
@@ -111,22 +115,7 @@ LimeAudioProcessorEditor::LimeAudioProcessorEditor (LimeAudioProcessor& p)
     // test. See AutoGain for what it matches and how slowly.
     setUpToggle (autoGainButton, "autoGain", switchLegend ("auto"), autoGainAttachment);
 
-    // The time-constant switches. Both rest off — a fresh instance runs the
-    // published ballistics, and the knobs hold each half's times in readiness —
-    // so the row carries a caption naming what the pair belongs to. One switch
-    // per half: engaging up hands the up pair its final smoothers, engaging
-    // down the same for down.
-    setUpToggle (upTimeButton, "upTimeOn", switchLegend ("up"), upTimeOnAttachment);
-    setUpToggle (downTimeButton, "downTimeOn", switchLegend ("down"), downTimeOnAttachment);
-
-    timeCaption.setText ("time constants", juce::dontSendNotification);
-    timeCaption.setFont (juce::Font (juce::FontOptions (captionFontSize, juce::Font::plain)));
-    timeCaption.setColour (juce::Label::textColourId, text());
-    timeCaption.setJustificationType (juce::Justification::centredLeft);
-    timeCaption.setBufferedToImage (true);
-    addAndMakeVisible (timeCaption);
-
-    addAndMakeVisible (brandingLabel);
+    content.addAndMakeVisible (brandingLabel);
     brandingLabel.setText ("Aptitude Audio | Lime | v" + juce::String (JucePlugin_VersionString),
                            juce::dontSendNotification);
     brandingLabel.setFont (juce::Font (juce::FontOptions (fontSize * (float) std::sqrt (2.0),
@@ -135,12 +124,12 @@ LimeAudioProcessorEditor::LimeAudioProcessorEditor (LimeAudioProcessor& p)
     brandingLabel.setJustificationType (juce::Justification::bottomLeft);
     brandingLabel.setBufferedToImage (true);
 
-    addAndMakeVisible (levelLabel);
+    content.addAndMakeVisible (levelLabel);
     levelLabel.setFont (juce::Font (juce::FontOptions (fontSize, juce::Font::plain)));
     levelLabel.setColour (juce::Label::textColourId, text());
     levelLabel.setJustificationType (juce::Justification::right);
 
-    addAndMakeVisible (autoCompareLabel);
+    content.addAndMakeVisible (autoCompareLabel);
     autoCompareLabel.setFont (juce::Font (juce::FontOptions (fontSize * 0.7f, juce::Font::plain)));
     autoCompareLabel.setJustificationType (juce::Justification::centredLeft);
 
@@ -161,8 +150,17 @@ LimeAudioProcessorEditor::LimeAudioProcessorEditor (LimeAudioProcessor& p)
     // and the meter strip down the edge. The width is measured rather than reserved — the
     // switch column is exactly as wide as the widest row of switches in it — so the plot
     // gets whatever is genuinely left over instead of a round number somebody guessed.
-    setSize (4 * gridPitch + gap + buttonColumnWidth() + meterStrip + 2 * margin,
-             547 + 2 * (knobSize + textBoxHeight + captionHeight + gap));
+    //
+    // The whole panel is then presented at windowScale through the content component's
+    // transform: the layout works in these design pixels, and the window the host gets is
+    // three quarters of them — the scaling the resizable-corner note above says the
+    // metrics cannot do individually.
+    designWidth = 4 * gridPitch + gap + buttonColumnWidth() + meterStrip + 2 * margin;
+    designHeight = 547 + 2 * (knobSize + textBoxHeight + captionHeight + gap);
+
+    content.setTransform (juce::AffineTransform::scale (windowScale));
+    setSize ((int) std::round ((float) designWidth * windowScale),
+             (int) std::round ((float) designHeight * windowScale));
 
     // Slow, and it only sets text and toggle states. Nothing here repaints the panel:
     // the meter and the plot animate themselves, and everything else is static.
@@ -219,14 +217,14 @@ void LimeAudioProcessorEditor::setUpTrim (Trim& trim, const juce::String& parame
     trim.slider.setPopupMenuEnabled (false);
     trim.slider.setColour (juce::Slider::textBoxHighlightColourId,
                            base().brighter().withSaturation (satMod()));
-    addAndMakeVisible (trim.slider);
+    content.addAndMakeVisible (trim.slider);
 
     trim.caption.setText (caption, juce::dontSendNotification);
     trim.caption.setFont (juce::Font (juce::FontOptions (captionFontSize, juce::Font::plain)));
     trim.caption.setColour (juce::Label::textColourId, text());
     trim.caption.setJustificationType (juce::Justification::centred);
     trim.caption.setBufferedToImage (true);
-    addAndMakeVisible (trim.caption);
+    content.addAndMakeVisible (trim.caption);
 
     trim.attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         audioProcessor.getState(), parameterId, trim.slider);
@@ -277,7 +275,7 @@ void LimeAudioProcessorEditor::setUpSelector (Selector& selector, const juce::St
             }
         };
 
-        addAndMakeVisible (*button);
+        content.addAndMakeVisible (*button);
         selector.buttons.push_back (std::move (button));
     }
 
@@ -290,7 +288,7 @@ void LimeAudioProcessorEditor::setUpSelector (Selector& selector, const juce::St
     // their words.
     selector.caption.setJustificationType (juce::Justification::centredLeft);
     selector.caption.setBufferedToImage (true);
-    addAndMakeVisible (selector.caption);
+    content.addAndMakeVisible (selector.caption);
 }
 
 void LimeAudioProcessorEditor::setUpToggle (
@@ -304,7 +302,7 @@ void LimeAudioProcessorEditor::setUpToggle (
     button.setColour (juce::TextButton::textColourOnId, background().darker (0.4f));
     button.setClickingTogglesState (true);
     button.setWantsKeyboardFocus (false);
-    addAndMakeVisible (button);
+    content.addAndMakeVisible (button);
 
     attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
         audioProcessor.getState(), parameterId, button);
@@ -344,23 +342,28 @@ int LimeAudioProcessorEditor::buttonColumnWidth() const
                       + widthFor (bypassButton.getButtonText()) + buttonGap
                       + widthFor (autoGainButton.getButtonText());
 
-    const int times = widthFor (upTimeButton.getButtonText()) + buttonGap
-                    + widthFor (downTimeButton.getButtonText());
-
     // Two of the knob grid's own columns, so the switch block lines up with the rows beside
     // it rather than ending wherever its longest word happened to. The measured widths are
     // a floor rather than the answer: they only matter if a word ever outgrows the grid.
     return juce::jmax (2 * gridPitch,
                        selectorWidth (processSelector),
                        selectorWidth (modeSelector),
-                       juce::jmax (toggles, times));
+                       toggles);
 }
 
 //==============================================================================
-void LimeAudioProcessorEditor::paint (juce::Graphics& g)
+void LimeAudioProcessorEditor::Content::paint (juce::Graphics& g)
 {
-    // Static. The meter and the plot are components and animate themselves.
+    // Static. The meter and the plot are components and animate themselves —
+    // and because this component is opaque and its children untransformed,
+    // their repaints clip this out entirely. See the header note.
     lime::surfaces::paintPanel (g, getLocalBounds());
+}
+
+void LimeAudioProcessorEditor::paint (juce::Graphics&)
+{
+    // Nothing: the content child covers the window exactly and paints the
+    // panel itself, where JUCE can cull it under the animated components.
 }
 
 void LimeAudioProcessorEditor::resized()
@@ -370,7 +373,12 @@ void LimeAudioProcessorEditor::resized()
     // order top to bottom: what the process is doing to the signal, said as a curve;
     // then said in words; then the switches that decide it; then the trims; then
     // identity and level.
-    auto bounds = getLocalBounds();
+    //
+    // Everything below positions children of `content`, in design pixels; the content
+    // component's transform presents the result at windowScale inside the window.
+    content.setBounds (0, 0, designWidth, designHeight);
+
+    auto bounds = juce::Rectangle<int> (designWidth, designHeight);
 
     meter.setBounds (bounds.removeFromRight (meterStrip));
 
@@ -461,7 +469,12 @@ void LimeAudioProcessorEditor::resized()
             const int x0 = left + (spanned * i) / count + i * buttonGap;
             const int x1 = left + (spanned * (i + 1)) / count + i * buttonGap;
 
-            items[(size_t) i]->setBounds (x0, row.getY(), x1 - x0, row.getHeight());
+            // No taller than it is wide: three rows dividing three knob rows'
+            // height would otherwise stretch every switch into a slab, and a
+            // square reads as a button at any column height.
+            const int side = juce::jmin (row.getHeight(), x1 - x0);
+
+            items[(size_t) i]->setBounds (x0, row.getY(), x1 - x0, side);
         }
     };
 
@@ -477,38 +490,32 @@ void LimeAudioProcessorEditor::resized()
         placeRow (cell, items);
     };
 
-    // Four rows in the switch column: the two selectors, the three plain toggles side by
-    // side, then the time-constant switches under their own caption. Each row is a
-    // caption slot over a row of switches, so every switch on the panel sits on one of
-    // four shared baselines.
+    // Three rows in the switch column: the two selectors, then the three plain toggles
+    // side by side. Every row holds three square switches, and every row registers to
+    // the knob row beside it: the buttons' bottom edge lands on that row's readout-box
+    // bottom — knob and value, not the caption under them — with the row's own caption
+    // above. One law places the whole grid, and the switches stay level with the
+    // controls they sit beside at any panel height.
     {
-        auto column = switchColumn;
+        const int side = (switchColumn.getWidth() - 2 * buttonGap) / 3;
 
-        // Four rows sharing the full height, each a caption slot over its switches. The
-        // plain toggles keep an empty caption slot rather than growing into it, so every
-        // switch position sits on one of the same four baselines.
-        const int rows = 4;
-        const int available = column.getHeight() - (rows - 1) * gap;
-        const int rowStep = available / rows;
+        const auto rowFor = [&] (int knobRowY)
+        {
+            const int bottom = knobRowY + knobSize + textBoxHeight;
 
-        placeSelector (processSelector, column.removeFromTop (rowStep));
-        column.removeFromTop (gap);
-        placeSelector (modeSelector, column.removeFromTop (rowStep));
-        column.removeFromTop (gap);
+            return juce::Rectangle<int> (switchColumn.getX(),
+                                         bottom - side - captionHeight,
+                                         switchColumn.getWidth(),
+                                         captionHeight + side);
+        };
 
-        auto toggles = column.removeFromTop (rowStep);
+        placeSelector (processSelector, rowFor (trimRow.getY()));
+        placeSelector (modeSelector, rowFor (timeRow.getY()));
+
+        auto toggles = rowFor (masterRow.getY());
         toggles.removeFromTop (captionHeight);
 
         placeRow (toggles, { &polarityButton, &autoGainButton, &bypassButton });
-
-        column.removeFromTop (gap);
-
-        // The time-constant row sits last: the knobs hold each half's times, and
-        // these are what hand a pair its final smoothers.
-        auto times = column.removeFromTop (rowStep);
-        timeCaption.setBounds (times.removeFromTop (captionHeight));
-
-        placeRow (times, { &upTimeButton, &downTimeButton });
     }
 
     inner.removeFromBottom (gap);

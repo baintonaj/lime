@@ -1,6 +1,6 @@
 # Lime
 
-**Spectral companding dynamics processor — user manual** · Aptitude Audio · v1.0.2
+**Spectral companding dynamics processor — user manual** · Aptitude Audio · v1.0.3
 
 # What Lime is
 
@@ -75,12 +75,14 @@ formats, and they install here:
 
 ```
 ~/Library/Audio/Plug-Ins/Components/Lime.component     Audio Unit
-~/Library/Audio/Plug-Ins/VST3/Lime.vst3                VST3
+/Library/Audio/Plug-Ins/VST3/Lime.vst3                 VST3
 ```
 
 Both are the same processor with the same interface. `make install` at the repository root
-builds, copies both into place and runs the `auval` check in one step. Restart your host
-after installing so it rescans. The AU passes Apple's `auval` validation.
+builds, copies both into place and runs the `auval` check in one step; the VST3 goes to
+the system-wide folder hosts reliably scan, so that one copy asks for your password.
+Restart your host after installing so it rescans. The AU passes Apple's `auval`
+validation.
 
 Lime is **stereo or mono in, matching out**, and mono costs exactly half of stereo — nothing
 is allocated or computed for a channel that is not there. Channels are processed independently
@@ -104,9 +106,8 @@ filters are not on the panel — the parameters remain, reached from the host, a
 its own section below.
 
 Every switch is in one column to the right of the rows: **process** and **mode** on the top
-two lines, **polarity**, **auto** and **bypass** on the third, and the **time constants**
-line last — the UP and DOWN switches, level with the knob row they govern. The line under
-it all reads *Aptitude Audio | Lime | v1.0.2*.
+two lines, and **polarity**, **auto** and **bypass** on the third. The line under it all
+reads *Aptitude Audio | Lime | v1.0.3*.
 
 ## process — off / a / b
 
@@ -284,38 +285,40 @@ Four knobs — **up attack**, **up release**, **down attack** and **down release
 attack and release time constants, one pair per half. The names read exactly as the trims
 do: **up** is the forward, encoding pass and **down** the reverse, decoding one, so the up
 pair paces how the encoder's detection follows the programme and the down pair the
-decoder's, and the two pairs are fully independent. Attack runs from 0.1 to 1000 ms and
-release from 10 ms to 5 s, each knob skewed so its default — 5 ms attack, 100 ms
-release — sits straight up. Readouts change units at a second, "5.0 ms" below it and
-"1.20 s" above; typed entry takes a bare number as milliseconds and "1.2 s" or "2s" as
-seconds.
+decoder's, and the two pairs are fully independent. Attack runs 1 to 100 ms and release
+10 ms to 2.5 s — spans settled by ear, wide enough that both ends are audible on
+dynamic material and no wider. Each knob is skewed so its default — 5 ms attack, 100 ms
+release, the stock ballistics — sits straight up. Readouts change units at a second,
+"5.0 ms" below it and "2.50 s" above; typed entry takes a bare number as milliseconds
+and "1.2 s" or "2s" as seconds.
 
-What the knobs replace is deliberately narrow. Each spectral stage's detection is a chain
-of smoothers — fast trackers feeding one slower, dominant final pole: 160 ms in the high
-half and 300 ms in the low for the fixed band, 80 and 150 ms for the sliding band — and it
-is **only that final smoother** an engaged pair overrides. The fast trackers ahead of it
-(15 ms in the fixed band, 5 and 7.5 ms in the sliding band) keep their published values,
-because their stagger is part of what makes the process sound the way it does; what you
-are shaping is the smoother that dominates how the detection settles. Engaged, the final
-runs asymmetric — the attack time while the level in a bin is rising, the release time
-while it falls — so the two knobs of a pair govern the two directions of one smoother.
+What the knobs drive is deliberately narrow. Each spectral stage's detection is a chain
+of smoothers — fast trackers feeding one slower, dominant final pole — and it is **only
+that final smoother** the knobs set. The fast trackers ahead of it (15 ms in the fixed
+band, 5 and 7.5 ms in the sliding band) keep their published values, because their
+stagger is part of what makes the process sound the way it does; what you are shaping is
+the smoother that dominates how the detection settles. The final runs asymmetric — the
+attack time while the level in a bin is rising, the release time while it falls — so the
+two knobs of a pair govern the two directions of one smoother.
 
-**A pair does nothing until its switch is on**, and both switches on the **time
-constants** line rest off. Off, the ballistics are the published ones *exactly* — measured
-bit-identical, not merely close — and the knobs' resting positions are times held in
-readiness rather than constants in force, the same arrangement the side-chain filter
-switches use. In the **a** process the up pair replaces the steady-state attack rate and
+**The times are always in circuit.** There is no engage switch: a knob's position is the
+constant in force, and the defaults — 5 ms attack, 100 ms release, on both halves — are
+the stock ballistics a fresh instance runs. The reference design's published constants
+(160 and 300 ms for the fixed band's finals, 80 and 150 ms for the sliding band's) live
+on in the DSP library and its tests, but they are not behind the panel — no knob position
+reaches them. In the **a** process the up pair replaces the steady-state attack rate and
 the 33 ms recovery while encoding, and the down pair while decoding; the peak/average
-detector constants keep their published values, and so does the 1 ms fast-attack cap — an
-attack set below 1 ms is bounded by that cap, so the bottom decade of the knob is a limit
-being honoured rather than a control failing to respond.
+detector constants and the 1 ms fast-attack cap keep their published values, and the
+attack range's floor sits exactly on that cap, so every position of the knob is a
+setting the process genuinely runs.
 
-**The round trip is exact only while the two halves agree** — same switch states, same
-times. Measured, matched pairs engaged at 5 ms and 100 ms null at −41.3 dB in loop mode
-and −277.3 dB through the a-type round trip; halves deliberately mismatched — up at
-5/100, down at 50/1000 — null at −19.1 dB. That is the price of independence: splitting
-the pairs is a legitimate creative choice that forfeits the null, and matching them, or
-leaving both off, preserves it. The discipline is the familiar one with a new clause — an
+**The round trip is exact only while the two halves agree** — same times, both pairs.
+Measured, halves matched at the 5 ms/100 ms defaults null at −41.3 dB in loop mode
+and −277.3 dB through the a-type round trip — and because both halves default
+identically, a fresh pair has that agreement out of the box. Halves deliberately
+mismatched — up at 5/100, down at 50/1000 — null at −19.1 dB. That is the price of
+independence: splitting the pairs is a legitimate creative choice that forfeits the null,
+and matching them preserves it. The discipline is the familiar one with a new clause — an
 encode and its decode must agree across two instances, and now the up and down halves
 must also agree within one. One further caution for the paired duty: because the times
 change the smoothers' stored state, two instances that change a time at different moments
@@ -623,7 +626,7 @@ is useless for the comparison it exists to make.
 | Thresholds, B | about −30, −48, −62 dB relative to reference |
 | Spectral split, B | fixed at 800 Hz, resolved onto 2048 log-spaced sections |
 | Trims | ±10 dB, four |
-| Time constants | attack 0.1 – 1000 ms, release 10 ms – 5 s, one pair per half, switched; published ballistics when off |
+| Time constants | attack 1 – 100 ms, release 10 ms – 2.5 s, one pair per half, always in circuit; defaults 5 ms / 100 ms |
 | Masters | ±24 dB in and out |
 | Mix | 0 – 200% |
 | Auto gain | correction ±12 dB, 3 s integration, 400 ms application |
@@ -642,12 +645,10 @@ is useless for the comparison it exists to make.
 | Up Out | −10 … +10 dB | 0.0 |
 | Down In | −10 … +10 dB | 0.0 |
 | Down Out | −10 … +10 dB | 0.0 |
-| Up Attack | 0.1 … 1000 ms | 5.0 ms |
-| Up Release | 10 ms … 5 s | 100 ms |
-| Down Attack | 0.1 … 1000 ms | 5.0 ms |
-| Down Release | 10 ms … 5 s | 100 ms |
-| Up Times On | off / on | off |
-| Down Times On | off / on | off |
+| Up Attack | 1.0 … 100 ms | 5.0 ms |
+| Up Release | 10 ms … 2.5 s | 100 ms |
+| Down Attack | 1.0 … 100 ms | 5.0 ms |
+| Down Release | 10 ms … 2.5 s | 100 ms |
 | Sidechain HPF (host only) | 20 Hz … 20 kHz | 80 Hz |
 | Sidechain LPF (host only) | 20 Hz … 20 kHz | 6.00 kHz |
 | Sidechain HPF On (host only) | off / on | off |
@@ -718,4 +719,4 @@ It is stated here rather than omitted because it is a real shortfall against the
 
 ---
 
-*Aptitude Audio | Lime | v1.0.2*
+*Aptitude Audio | Lime | v1.0.3*

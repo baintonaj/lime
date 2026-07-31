@@ -41,7 +41,7 @@ the project. See [The central constraint](#the-central-constraint).
 
 ## Status
 
-Version 1.0.2. Working and testable in a host, with every claim below backed by a check in
+Version 1.0.3. Working and testable in a host, with every claim below backed by a check in
 the six standalone suites — **698 checks passing**, runnable with one `ctest`.
 
 One design target is **not** met: the encode → decode round trip should null to better than
@@ -77,16 +77,25 @@ the size it is.
 ## Building
 
 Lime is distributed as source only — there are no pre-built downloads; the commands below
-produce everything the plugin ships as. The quickest route is the Makefile:
+produce everything the plugin ships as. Two tools are needed and neither ships on a fresh
+Mac: the Xcode Command Line Tools for the C++ compiler (`xcode-select --install`) and
+CMake (`brew install cmake`, or [cmake.org](https://cmake.org/download/)). Every make
+target checks for both first and names the one that is missing. The quickest route is the
+Makefile:
 
 ```sh
-make install
+make all
 ```
 
-which builds, copies the AU and VST3 into `~/Library/Audio/Plug-Ins`, and validates the AU
-with `auval`. The other targets: `make` just builds, `make universal` builds both
-architectures, `make test` runs the six suites, `make uninstall` removes the installed
-plug-ins, `make clean` deletes the build directory.
+which builds, runs all six test suites, copies the AU into
+`~/Library/Audio/Plug-Ins/Components` and the VST3 into `/Library/Audio/Plug-Ins/VST3`
+(the system-wide folder hosts reliably scan — sudo asks for your password for that one
+copy), and validates the AU with `auval` — stopping at the first failure, so a build that
+fails its own checks never reaches the Library folders. The
+individual targets: `make` just builds, `make test` builds and runs the suites,
+`make install` builds, copies and validates without the test run, `make universal` builds
+both architectures, `make uninstall` removes the installed plug-ins, `make clean` deletes
+the build directory, and `make help` prints the whole summary in the terminal.
 
 The Makefile is a thin wrapper; CMake is the primary build and fetches JUCE 9.0.0 itself:
 
@@ -99,12 +108,22 @@ For a universal release binary add `-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` to
 configure line; to build against an existing JUCE checkout instead of downloading one, add
 `-DLIME_JUCE_SOURCE_DIR=/path/to/JUCE`.
 
-The AU, VST3 and Standalone targets land under `build/Lime_artefacts/Release/`. Copy the two
-plug-ins into `~/Library/Audio/Plug-Ins/Components` and `~/Library/Audio/Plug-Ins/VST3` to
-install them, then validate the AU with `auval -v aufx Lim1 APTI`. Installing is never a
-side effect of building, whichever route you take — `make install` is an explicit target —
-because `auval` reports on whatever is installed, and a build that installs silently is a
-build that can silently test the wrong binary.
+The AU, VST3 and Standalone targets land under `build/Lime_artefacts/Release/`. Installing
+is never a side effect of building, whichever route you take — `make install` is an
+explicit target — because `auval` reports on whatever is installed, and a build that
+installs silently is a build that can silently test the wrong binary. To copy the plug-ins
+into place by hand, one at a time:
+
+```sh
+cp -R build/Lime_artefacts/Release/AU/Lime.component ~/Library/Audio/Plug-Ins/Components/
+sudo cp -R build/Lime_artefacts/Release/VST3/Lime.vst3 /Library/Audio/Plug-Ins/VST3/
+auval -v aufx Lim1 APTI
+```
+
+The AU folder is per-user, so its copy needs no privileges; the VST3 goes to the
+system-wide folder hosts reliably scan, which is root-owned — hence the `sudo`. If a
+`Lime` bundle is already installed, delete it first rather than copying over it: `cp -R`
+into an existing bundle nests the new one inside the old.
 
 The Projucer project `Lime/Lime.jucer` is kept as a secondary route for anyone working in
 that ecosystem — resave it with a JUCE 9 Projucer and build the generated Xcode project.

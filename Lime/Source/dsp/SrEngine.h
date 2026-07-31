@@ -273,6 +273,12 @@ private:
     std::atomic<int> lastDominants { 0 };
     double smoothing = 0.0;
     double envelopeBark = 1.0;
+    /** Pushes the cached corners / times into every side chain. Called by the
+        guarded setters on a change, and by prepare() for freshly built
+        channels the guards would otherwise starve. */
+    void applyDetectorCorners();
+    void applyTimeConstants();
+
     double sidechainHighPassHz = 0.0;
     double sidechainLowPassHz = 0.0;
 

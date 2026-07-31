@@ -3118,12 +3118,17 @@ void testEngineProcessDoesNotAllocate()
     };
 
     // STFT realisation, with a section move mid-stream — setSections is documented
-    // allocation free, so it is armed too rather than taken on faith.
+    // allocation free, so it is armed too rather than taken on faith. The
+    // side-chain corners and the time constants join it: the wrapper calls
+    // their setters every chunk, so their moving paths belong inside the net.
     allocationCount.store (0);
     countingAllocations.store (true);
 
     runBlocks();
     engine.setSections (64);
+    engine.setSidechainHighPass (200.0);
+    engine.setSidechainLowPass (6000.0);
+    engine.setTimeConstants (5.0, 100.0, 50.0, 1000.0);
     runBlocks();
 
     countingAllocations.store (false);

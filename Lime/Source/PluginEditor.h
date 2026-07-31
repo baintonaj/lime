@@ -100,6 +100,29 @@ private:
     LimeAudioProcessor& audioProcessor;
     LimeLookAndFeel lookAndFeel;
 
+    // Every control is a child of this one component, which carries the
+    // windowScale transform. A transform on the editor itself is forbidden —
+    // hosts own that one for their own rescaling, and JUCE asserts on it —
+    // so the sanctioned form is a scaled child holding the whole panel. It is
+    // declared first so it outlives every component inside it. The layout
+    // still thinks in design pixels: designWidth by designHeight, measured in
+    // the constructor, laid out in resized().
+    //
+    // It also owns the panel painting, opaquely. JUCE cannot cull what the
+    // opaque meter and plot cover when the component underneath them is
+    // transformed — the culling walk skips transformed children — so a panel
+    // painted by the editor would re-run its gradients under every meter tick
+    // and plot frame. Painted here, one level down where the children are
+    // untransformed, the dirty rects clip it to nothing.
+    struct Content : juce::Component
+    {
+        Content() { setOpaque (true); }
+        void paint (juce::Graphics&) override;
+    };
+
+    Content content;
+    int designWidth = 0, designHeight = 0;
+
     SpectrumDisplay display;
     MeterBar meter;
 
@@ -116,14 +139,6 @@ private:
     juce::TextButton polarityButton, bypassButton, autoGainButton;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
         polarityAttachment, bypassAttachment, autoGainAttachment;
-
-    // The time-constant switches, in their own captioned row of the switch
-    // column: the knobs hold each half's times, and these put a half's pair in
-    // charge of its final smoothers.
-    juce::TextButton upTimeButton, downTimeButton;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
-        upTimeOnAttachment, downTimeOnAttachment;
-    juce::Label timeCaption;
 
     // The panel carries no explanatory text: no running description of what the process is
     // doing, and no tooltips. Both were tried. The description took a whole row and changed

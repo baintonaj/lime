@@ -88,8 +88,20 @@ void FixedBand::reset()
 }
 
 //==============================================================================
-void FixedBand::processFrame (const double* magnitudes, double* transferOut)
+template <typename Shape>
+void FixedBand::processFrameShaped (const double* magnitudes, double* transferOut, Shape shape)
 {
+    // Members hoisted into locals so the vectoriser need not re-load them per
+    // bin against possible aliasing with the state stores below.
+    const double threshold = thresholdLinear;
+    const double feedforward = params.feedforwardWeight;
+    const double normalisation = controlNormalisation;
+    const double endStop = params.endStopFraction;
+    const double mainA = mainCoeff;
+    const double passA = passCoeff;
+    const double riseA = finalRiseCoeff;
+    const double fallA = finalFallCoeff;
+
     for (int k = 0; k < numBins; ++k)
     {
         const size_t i = (size_t) k;
@@ -97,8 +109,8 @@ void FixedBand::processFrame (const double* magnitudes, double* transferOut)
         // Feedback control, using the control signal established by previous
         // frames: linear below the threshold, shedding boost above it at a rate set
         // by the knee exponent.
-        const double ratio = control[i] / thresholdLinear;
-        const double shaped = shapeRatio (ratio, params.kneeExponent);
+        const double ratio = control[i] / threshold;
+        const double shaped = shape (ratio);
 
         const double gain = 1.0 / (1.0 + shaped);
 
@@ -109,13 +121,13 @@ void FixedBand::processFrame (const double* magnitudes, double* transferOut)
         // Feedback plus feedforward, normalised so the low-level knee stays put.
         // The feedforward term is what limits the differential component at high
         // level; see the comment on feedforwardWeight.
-        const double combined = (bandOutput + params.feedforwardWeight * magnitudes[k])
-                              * controlNormalisation;
+        const double combined = (bandOutput + feedforward * magnitudes[k])
+                              * normalisation;
 
         // Main control path: rectified control signal opposed by the end-stop.
-        const double mainInput = std::max (0.0, combined - params.endStopFraction * magnitudes[k]);
+        const double mainInput = std::max (0.0, combined - endStop * magnitudes[k]);
 
-        mainSmoothed[i] = mainCoeff * mainSmoothed[i] + (1.0 - mainCoeff) * mainInput;
+        mainSmoothed[i] = mainA * mainSmoothed[i] + (1.0 - mainA) * mainInput;
 
         // Pass-band control path: frequency-weighted, and deliberately *not*
         // opposed by the end-stop, so that it can take over through the maximum
@@ -123,17 +135,31 @@ void FixedBand::processFrame (const double* magnitudes, double* transferOut)
         // conditions warrant.
         const double passInput = combined * passWeight[i];
 
-        passSmoothed[i] = passCoeff * passSmoothed[i] + (1.0 - passCoeff) * passInput;
+        passSmoothed[i] = passA * passSmoothed[i] + (1.0 - passA) * passInput;
 
         const double selected = std::max (mainSmoothed[i], passSmoothed[i]);
 
         // Rising selected level is the attack direction. With no user times the
         // two coefficients are both finalCoeff and this is the published
         // symmetric smoother, bit for bit.
-        const double finalA = selected > control[i] ? finalRiseCoeff : finalFallCoeff;
+        const double finalA = selected > control[i] ? riseA : fallA;
 
         control[i] = finalA * control[i] + (1.0 - finalA) * selected;
     }
+}
+
+void FixedBand::processFrame (const double* magnitudes, double* transferOut)
+{
+    // The shape is chosen once per frame; see processFrameShaped. The squared
+    // knee's loop computes exactly what shapeRatio's 2.0 case computes, so
+    // the specialisation changes nothing but the discarded pow calls.
+    if (params.kneeExponent == 2.0)
+        processFrameShaped (magnitudes, transferOut,
+                            [] (double ratio) { return ratio * ratio; });
+    else
+        processFrameShaped (magnitudes, transferOut,
+                            [this] (double ratio)
+                            { return shapeRatio (ratio, params.kneeExponent); });
 }
 
 } // namespace lime

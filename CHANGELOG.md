@@ -1,5 +1,61 @@
 # Changelog
 
+## 1.0.3
+
+- The four time-constant knobs are now **always in circuit**. The `Up Times On` and
+  `Down Times On` switches shipped in 1.0.2 and were removed within a day, because the
+  panel's own author looked at the UP and DOWN buttons and could not tell what they did —
+  and the author failing to read a control is the only measurement of its clarity that
+  matters. Rather than re-caption around the ambiguity, the change removes it at the
+  root: a knob's position is now always the constant in force, never a time held in
+  readiness behind a switch on another row. The two boolean parameters are gone from the
+  plugin, which now publishes 21 host parameters.
+- The defaults are therefore the stock ballistics: a fresh instance runs 5 ms attack and
+  100 ms release on both halves. The published constants — the fixed band's 160/300 ms
+  finals, the sliding band's 80/150 ms — are no longer reachable from the plugin; they
+  remain a capability of the DSP library through the zero sentinel, still exercised by
+  `testGlobalTimeConstants` and still measured bit-identical at the library level.
+  Because both halves default identically, a fresh pair agrees out of the box and the
+  round trip keeps its figures: matched times at 5 ms/100 ms null at −41.3 dB in loop
+  mode and −277.3 dB through the a-type round trip, and every other 1.0.2 measurement
+  stands.
+- One consequence for existing sessions, stated plainly: a 1.0.2 session loads, but a
+  session that had a switch **off** now runs its stored knob times — the switch it relied
+  on no longer exists — so its detection ballistics change from the published constants
+  to whatever its knobs held in readiness.
+- The switch column is back to three rows — **process**, **mode**, then
+  **polarity**/**auto**/**bypass** — and the knob grid keeps its three: the pass trims,
+  their time constants, and the centred masters.
+- The whole window now draws at 75% of its design size. The third knob row had made the
+  full-size panel taller than smaller screens comfortably give it; one
+  `AffineTransform::scale` on a content component holding the entire panel — a transform
+  on the editor itself is the host's to own — presents every metric smaller together
+  while the layout keeps thinking in design pixels, the scaling the fixed-size window's
+  pixel-defined metrics cannot do individually. And the switches now cap their height at
+  their own width, so a taller column renders them as square buttons rather than slabs.
+- A pre-release performance sweep closed the release. The one real find predated 1.0.0:
+  the fixed band's knee loop auto-vectorised with `shapeRatio`'s general `std::pow`
+  branch speculated into it — one discarded libm call per bin per frame, roughly two
+  million a second. The squared knee now gets its own loop with the power inlined,
+  bit-identical by construction (every measured figure in the suite is unchanged), and
+  the engine's cost fell about 13%: measured on Apple silicon, the full loop round trip
+  runs at 14.2% of one core stereo at 48 kHz, a single encode pass at 7.0%, the a-type
+  at 0.1%. The editor stopped repainting the panel gradients under every meter and plot
+  frame (the scaled content component defeated JUCE's opaque-child culling; it now
+  paints the panel itself, opaquely, where the culling works), the engine-level setters
+  gained the same unchanged-value guards their chain-level halves already had, and the
+  allocation test now arms the corner and time-constant setters alongside the section
+  move.
+- The time ranges tightened to what the ear can use: attack 1 – 100 ms, release
+  10 ms – 2.5 s, settled by listening. The original attack span dived a decade below
+  the published fast trackers that bound the detection's response regardless — settings
+  down there changed a readout and never a sound, and a range must not offer what
+  cannot be heard. The new floor coincides with the a-type's 1 ms fast-attack cap, so
+  every knob position is a setting the process genuinely runs, and both defaults —
+  5 ms and 100 ms, the stock ballistics — rest at noon on their knobs.
+- Check counts are unchanged — 698 across the six suites, `DspTests` at 389 — and
+  `auval` passes at 1.0.3.
+
 ## 1.0.2
 
 - Four new knobs — **up attack**, **up release**, **down attack** and **down release** —

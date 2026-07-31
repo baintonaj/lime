@@ -2050,3 +2050,98 @@ than a 1 ms one.
 | `TapeTests` | 56 |
 | `BarkTests` | 52 |
 | `AtypeTests` | 45 |
+
+---
+
+## v1.0.3 — always-on times, and a smaller window
+
+The `Up Times On` and `Down Times On` switches shipped in v1.0.2 and were removed within
+a day, and the reason deserves recording plainly because it is the only kind of reason
+that decides such things: the panel's own author looked at the UP and DOWN buttons on the
+**time constants** line and could not tell what they did. Not a hypothetical user, not a
+usability review — the person who designed the line, the day after shipping it. A control
+its own author cannot read has failed the only measurement of clarity that matters, and
+the failure was in the idea rather than the caption: two direction-named switches
+engaging four knobs on a different row is a relationship a caption can assert but a
+glance cannot recover. So the fix was not a better caption. The times were made
+**always-on**, which removes the ambiguity at the root — a knob's position is now always
+the constant in force, never a time held in readiness behind a switch elsewhere — and the
+two boolean parameters left the plugin, which now publishes 21 host parameters.
+
+What always-on changes about the stock sound, and what it does not. A fresh instance now
+runs 5 ms attack / 100 ms release on both halves — the knobs' defaults *are* the unit's
+ballistics — where v1.0.2's resting state was the published constants exactly. Those
+published finals (160/300 ms fixed band, 80/150 ms sliding) are no longer reachable from
+the plugin: they remain a capability of the DSP library, whose zero sentinel still
+reduces to the identical arithmetic and is still asserted bit-identical by
+`testGlobalTimeConstants` — the published unit survives at the library level; the plugin
+simply never sends the zero any more. The round-trip discipline is unharmed, because both
+halves default identically: a fresh pair agrees out of the box, and matched times at the
+defaults measure −41.3 dB in loop mode and −277.3 dB through the a-type round trip — the
+v1.0.2 figures, standing, along with the mismatched −19.1 dB and the audible
+asymmetries.
+
+The one cost lands on existing sessions and is stated rather than hidden: a v1.0.2
+session loads, but a session that had a switch off now runs its stored knob times — the
+switch it relied on no longer exists — so its detection ballistics change from the
+published constants to whatever its knobs held in readiness. A session that never touched
+the time knobs moves from the published finals to 5/100, which is the same change a fresh
+instance embodies; a session that parked exotic times behind an off switch gets those
+times in force.
+
+The panel follows the parameters: the switch column is back to three rows — process,
+mode, polarity/auto/bypass — while the knob grid keeps its three, the pass trims over
+their time constants over the centred masters.
+
+The window now draws at **75% of its design size**. The third knob row had made the
+full-size panel taller than smaller screens comfortably give it, and the
+resizable-corner note's argument still holds — scaling properly means every metric in
+LimeStyle becoming a ratio and the artwork re-rasterising per size, real work for a
+panel whose one job is to be read. So the panel does not do that. One
+`AffineTransform::scale (windowScale)` — `windowScale = 0.75f` in `LimeStyle.h` — on a
+content component that holds the entire panel presents the whole window smaller while
+the layout keeps thinking in design pixels: every metric scales together through the
+one transform, so nothing can fall out of step with anything else, which is precisely
+the failure mode the old resize handle had when it moved the frame and left the metrics
+behind. The transform lives on that child rather than on the editor because the
+editor's own transform belongs to the host — JUCE asserts on any other owner, since a
+host rescaling for DPI would silently obliterate it. One consequence of three switch
+rows dividing three knob rows' height: the switches would have stretched into slabs, so
+each now caps its height at its own width and renders square at any column height.
+
+A pre-release performance sweep closed the version out, and its one real find predated
+v1.0.0. `shapeRatio` special-cases the squared knee precisely so no `std::pow` runs — but
+inside `FixedBand::processFrame`'s auto-vectorised loop the compiler speculated all three
+of its branches, executing the general `pow` unconditionally per bin and blending the
+result away: about two million discarded libm calls a second, invariant across the
+section count, and verified in the emitted assembly. The frame loop is now parameterised
+on the knee shape and chooses once per frame, so the squared knee's loop contains no
+`pow` at all; the arithmetic is identical bit for bit, which the suite confirms — every
+measured figure, the nulls included, is unchanged to the digit. Measured cost on Apple
+silicon fell about 13%: the full loop round trip runs at 14.2% of one core stereo at
+48 kHz, a single encode pass at 7.0%, and the a-type at 0.1%. The same sweep found the
+scaled content component defeating JUCE's opaque-child culling — the panel gradients
+were repainting under every meter tick and plot frame, because the culling walk skips
+transformed children — so the content component now paints the panel itself, opaquely,
+one level down where its children are untransformed and the dirty rects clip it to
+nothing. The engine-level corner and time setters gained the unchanged-value guards
+their chain-level halves already had (with prepare re-applying through unguarded apply
+functions, so freshly built channels are not starved by their own equality checks), and
+the allocation test arms all three setters alongside the section move it already
+exercised.
+
+The time ranges narrowed after listening rather than measuring. The attack knobs
+originally ran from 0.1 ms to a second, and their bottom decade did nothing audible: the
+published fast trackers ahead of the governed final smoother — the sliding band's 5 and
+7.5 ms firsts, the fixed band's 15 ms mains — bound the detection's response whatever
+the final is set to, so 0.1 ms and 5 ms differed as numbers and not as sound. The
+principle that settled it: a range must not offer what cannot be heard. The final spans,
+chosen by ear, are attack 1 to 100 ms and release 10 ms to 2.5 s — tight enough that
+both ends of each knob are audible on dynamic material, the attack floor landing exactly
+on the a-type's 1 ms fast-attack cap so the cap caveat disappeared with the dead zone,
+and both stock defaults back at noon where this panel likes them.
+
+### State
+
+Check counts are unchanged — **698 checks passing** across the six suites, `DspTests` at
+389 — and `auval` passes at 1.0.3. This is the final release.

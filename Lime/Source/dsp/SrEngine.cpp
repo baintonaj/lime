@@ -184,9 +184,12 @@ void SrEngine::prepare (double sampleRate, int maxBlockSize, int numChannels)
     // The side-chain filters ride along for the same reason.
     setSections (sections.load (std::memory_order_relaxed));
     setProbesActive (probesActive.load (std::memory_order_relaxed));
-    setSidechainHighPass (sidechainHighPassHz);
-    setSidechainLowPass (sidechainLowPassHz);
-    setTimeConstants (upAttackMs, upReleaseMs, downAttackMs, downReleaseMs);
+
+    // Through the apply functions, not the setters: the setters early-out on
+    // unchanged values, and the values have not changed — the freshly built
+    // channels simply have not heard them yet.
+    applyDetectorCorners();
+    applyTimeConstants();
 
     // Unity, and snapped rather than faded: prepare is not a control movement.
     sendOutTrim.prepare (sampleRate, defaultSettlingSeconds, 1.0);
@@ -273,41 +276,63 @@ void SrEngine::setEnvelopeSmoothing (double bark)
 
 void SrEngine::setSidechainHighPass (double cornerHz)
 {
-    sidechainHighPassHz = cornerHz;
+    // The engine-level guard matches the chain-level ones: the wrapper calls
+    // this every chunk, and an unmoved corner should cost a compare, not a
+    // walk of the channel list. prepare() re-applies through the apply
+    // functions below, which a guard here would otherwise defeat.
+    if (cornerHz == sidechainHighPassHz)
+        return;
 
-    // The same corner to all four — an encode and a decode that disagreed on what
-    // the detection reads would compute different gains, and the exactness of the
-    // round trip rests on them never doing that.
-    for (auto& c : channels)
-    {
-        c->hfEncode.setDetectorHighPass (cornerHz);
-        c->lfEncode.setDetectorHighPass (cornerHz);
-        c->hfDecode.setDetectorHighPass (cornerHz);
-        c->lfDecode.setDetectorHighPass (cornerHz);
-    }
+    sidechainHighPassHz = cornerHz;
+    applyDetectorCorners();
 }
 
 void SrEngine::setSidechainLowPass (double cornerHz)
 {
-    sidechainLowPassHz = cornerHz;
+    if (cornerHz == sidechainLowPassHz)
+        return;
 
+    sidechainLowPassHz = cornerHz;
+    applyDetectorCorners();
+}
+
+void SrEngine::applyDetectorCorners()
+{
+    // The same corners to all four — an encode and a decode that disagreed on
+    // what the detection reads would compute different gains, and the exactness
+    // of the round trip rests on them never doing that. The chain setters
+    // early-out per corner, so pushing both here costs nothing extra.
     for (auto& c : channels)
     {
-        c->hfEncode.setDetectorLowPass (cornerHz);
-        c->lfEncode.setDetectorLowPass (cornerHz);
-        c->hfDecode.setDetectorLowPass (cornerHz);
-        c->lfDecode.setDetectorLowPass (cornerHz);
+        c->hfEncode.setDetectorHighPass (sidechainHighPassHz);
+        c->lfEncode.setDetectorHighPass (sidechainHighPassHz);
+        c->hfDecode.setDetectorHighPass (sidechainHighPassHz);
+        c->lfDecode.setDetectorHighPass (sidechainHighPassHz);
+
+        c->hfEncode.setDetectorLowPass (sidechainLowPassHz);
+        c->lfEncode.setDetectorLowPass (sidechainLowPassHz);
+        c->hfDecode.setDetectorLowPass (sidechainLowPassHz);
+        c->lfDecode.setDetectorLowPass (sidechainLowPassHz);
     }
 }
 
 void SrEngine::setTimeConstants (double upAttack, double upRelease,
                                  double downAttack, double downRelease)
 {
+    if (upAttack == upAttackMs && upRelease == upReleaseMs
+        && downAttack == downAttackMs && downRelease == downReleaseMs)
+        return;
+
     upAttackMs = upAttack;
     upReleaseMs = upRelease;
     downAttackMs = downAttack;
     downReleaseMs = downRelease;
 
+    applyTimeConstants();
+}
+
+void SrEngine::applyTimeConstants()
+{
     // Each direction's pair goes to both of its side chains — the hf and lf
     // halves are one detection and must keep moving together. Up and down may
     // differ; the price, stated plainly, is the exact null: encode and decode
@@ -315,10 +340,10 @@ void SrEngine::setTimeConstants (double upAttack, double upRelease,
     // is complementary again only once the pairs agree.
     for (auto& c : channels)
     {
-        c->hfEncode.setTimeConstants (upAttack, upRelease);
-        c->lfEncode.setTimeConstants (upAttack, upRelease);
-        c->hfDecode.setTimeConstants (downAttack, downRelease);
-        c->lfDecode.setTimeConstants (downAttack, downRelease);
+        c->hfEncode.setTimeConstants (upAttackMs, upReleaseMs);
+        c->lfEncode.setTimeConstants (upAttackMs, upReleaseMs);
+        c->hfDecode.setTimeConstants (downAttackMs, downReleaseMs);
+        c->lfDecode.setTimeConstants (downAttackMs, downReleaseMs);
     }
 }
 

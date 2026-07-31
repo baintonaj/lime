@@ -105,4 +105,10 @@ namespace lime::style
     inline constexpr int knobSize = 101;
     inline constexpr int buttonSize = 45;
     inline constexpr int meterStrip = 74;
+
+    /** The whole window, drawn at three quarters of its design size. The
+        time-constant row made the full-size panel taller than smaller screens
+        comfortably give it; one transform scales every metric together, so
+        the layout keeps thinking in the design pixels above. */
+    inline constexpr float windowScale = 0.75f;
 }
